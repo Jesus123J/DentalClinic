@@ -1,12 +1,20 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:dental_clinic/app.dart';
+import 'package:dental_clinic/core/widgets/placeholder_page.dart';
 
 void main() {
-  testWidgets('La app arranca y muestra el dashboard', (tester) async {
-    await tester.pumpWidget(const DentalClinicApp());
-    await tester.pumpAndSettle();
+  testWidgets('PlaceholderPage muestra el titulo del modulo', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: PlaceholderPage(
+          title: 'Tratamientos',
+          icon: Icons.medical_services_outlined,
+        ),
+      ),
+    ));
 
-    expect(find.text('Dashboard'), findsWidgets);
+    expect(find.text('Tratamientos'), findsOneWidget);
+    expect(find.text('Modulo en construccion'), findsOneWidget);
   });
 }

@@ -1,0 +1,12 @@
+name: dental_clinic_server
+description: API REST para el sistema odontologico (conecta Flutter con MySQL).
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  mysql_client: ^0.0.27
+  shelf: ^1.4.0
+  shelf_router: ^1.1.0

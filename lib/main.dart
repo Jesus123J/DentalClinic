@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'app.dart';
-import 'core/database/database_helper.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  DatabaseHelper.initFfi();
+  await initializeDateFormatting('es');
   runApp(const DentalClinicApp());
 }

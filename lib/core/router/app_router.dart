@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/appointments/presentation/pages/appointments_page.dart';
 import '../../features/billing/presentation/pages/billing_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
+import '../../features/patients/domain/entities/patient.dart';
+import '../../features/patients/presentation/pages/patient_history_page.dart';
 import '../../features/patients/presentation/pages/patients_page.dart';
 import '../../features/reports/presentation/pages/reports_page.dart';
 import '../../features/treatments/presentation/pages/treatments_page.dart';
@@ -25,6 +27,11 @@ class AppRouter {
           GoRoute(
             path: '/patients',
             builder: (context, state) => const PatientsPage(),
+          ),
+          GoRoute(
+            path: '/patients/history',
+            builder: (context, state) =>
+                PatientHistoryPage(patient: state.extra! as Patient),
           ),
           GoRoute(
             path: '/appointments',

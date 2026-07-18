@@ -2,58 +2,53 @@
 
 ## Visión general
 
-Aplicación de escritorio **offline-first**: toda la información se guarda en una base de datos **SQLite local**, ideal para el equipo de recepción/consultorio sin depender de internet.
+Sistema en 3 partes: la **app Flutter** (web o escritorio), una **API REST en Dart** (`server/`) y la base de datos **MySQL**. El navegador no permite conexiones directas a MySQL, por lo que toda la app pasa por la API; esto además permite que varias computadoras del consultorio compartan los mismos datos.
 
 ```mermaid
 flowchart TB
-    subgraph Presentation["Capa de Presentación"]
+    subgraph App["App Flutter (web / escritorio)"]
         UI[Pages / Widgets]
-        P[Providers - estado]
+        E[Entities - domain]
+        RC[Contratos de Repositorio - domain]
+        RI[Repositorios - data]
+        API[ApiClient - core/api]
     end
-    subgraph Domain["Capa de Dominio"]
-        UC[UseCases]
-        E[Entities]
-        RC[Contratos de Repositorio]
+    subgraph Server["server/ (Dart + shelf)"]
+        EP[Endpoints REST]
     end
-    subgraph Data["Capa de Datos"]
-        RI[Repositorios - implementación]
-        DS[DataSources]
-    end
-    DB[(SQLite local)]
+    DB[(MySQL)]
 
-    UI --> P --> UC --> RC
+    UI --> RC
     RI -. implementa .-> RC
-    RI --> DS --> DB
-    UC --> E
+    RI --> API -- HTTP/JSON --> EP --> DB
+    UI --> E
 ```
 
 ## Regla de dependencias
 
 - `presentation` solo conoce a `domain` (nunca a `data`).
-- `domain` no depende de nada externo (Flutter, SQLite, etc.).
-- `data` implementa los contratos definidos en `domain`.
-- `core/` contiene lo transversal: tema, rutas, base de datos, utilidades.
+- `domain` no depende de nada externo (Flutter, HTTP, MySQL).
+- `data` implementa los contratos de `domain` llamando a la API REST.
+- `core/` contiene lo transversal: tema, rutas, cliente HTTP, widgets compartidos.
+- Solo `server/` conoce MySQL; sus credenciales están en `server/bin/server.dart`.
 
 ## Módulos (features)
 
-| Módulo | Responsabilidad |
-|---|---|
-| `auth` | Inicio de sesión y roles (admin, odontólogo, recepción) |
-| `dashboard` | Indicadores del día: citas, ingresos, pacientes nuevos |
-| `patients` | CRUD de pacientes, historial clínico, alergias |
-| `appointments` | Agenda: crear, reprogramar y cancelar citas |
-| `treatments` | Tratamientos por pieza dental, estado y costo |
-| `billing` | Facturas, pagos parciales y saldos |
-| `reports` | Estadísticas e informes exportables |
+| Módulo | Estado | Responsabilidad |
+|---|---|---|
+| `dashboard` | ✅ | Indicadores: pacientes registrados, citas de hoy, pendientes |
+| `patients` | ✅ | CRUD de pacientes + historia clínica (diagnóstico, tratamiento, observaciones) |
+| `appointments` | ✅ | Agenda por día: crear citas y cambiar estado |
+| `reports` | ✅ | Reporte de atenciones por rango de fechas |
+| `treatments` | ⏳ | Tratamientos por pieza dental (pendiente) |
+| `billing` | ⏳ | Facturación y pagos (pendiente) |
 
-## Modelo de datos (SQLite)
+## Modelo de datos (MySQL)
 
 ```mermaid
 erDiagram
     PATIENTS ||--o{ APPOINTMENTS : tiene
-    PATIENTS ||--o{ TREATMENTS : recibe
-    PATIENTS ||--o{ INVOICES : genera
-    TREATMENTS ||--o{ INVOICES : factura
+    PATIENTS ||--o{ CLINICAL_RECORDS : registra
 
     PATIENTS {
         int id PK
@@ -62,42 +57,35 @@ erDiagram
         string document_id
         string phone
         string email
-        string birth_date
+        date birth_date
         string allergies
+        string notes
     }
     APPOINTMENTS {
         int id PK
         int patient_id FK
-        string date_time
-        int duration_minutes
+        datetime date_time
+        string reason
         string status
     }
-    TREATMENTS {
+    CLINICAL_RECORDS {
         int id PK
         int patient_id FK
-        string name
-        string tooth
-        real cost
-        string status
-    }
-    INVOICES {
-        int id PK
-        int patient_id FK
-        int treatment_id FK
-        real total
-        real paid
-        string status
+        date record_date
+        string diagnosis
+        string treatment
+        string observations
     }
 ```
 
-El esquema se crea en `lib/core/database/database_helper.dart`.
+El esquema se crea con `docs/database/schema.sql` y los datos de ejemplo con `docs/database/seed.sql`.
 
 ## Flujo típico (ejemplo: registrar paciente)
 
-1. `PatientsPage` (presentation) llama al `PatientsProvider`.
-2. El provider ejecuta el caso de uso `CreatePatient` (domain).
-3. El caso de uso usa el contrato `PatientRepository` (domain).
-4. `PatientRepositoryImpl` (data) mapea la entidad a modelo y la guarda vía el `DataSource` en SQLite.
+1. `PatientsPage` (presentation) abre el formulario `PatientFormDialog`.
+2. La página usa el contrato `PatientRepository` (domain).
+3. `PatientRepositoryImpl` (data) envía `POST /patients` vía `ApiClient`.
+4. El servidor (`server/bin/server.dart`) ejecuta el `INSERT` en MySQL y responde el `id` creado.
 
 ## Convenciones
 
