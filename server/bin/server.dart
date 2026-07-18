@@ -31,6 +31,16 @@ String _newToken() =>
 String _hashPassword(String salt, String password) =>
     sha256.convert(utf8.encode('$salt$password')).toString();
 
+String _newSalt() => List<int>.generate(8, (_) => _random.nextInt(256))
+    .map((b) => b.toRadixString(16).padLeft(2, '0'))
+    .join();
+
+/// Datos de la sesion del token de la peticion (o null si no hay).
+Map<String, dynamic>? _sessionOf(Request request) {
+  final header = request.headers['authorization'] ?? '';
+  return _sessions[header.startsWith('Bearer ') ? header.substring(7) : ''];
+}
+
 Response _json(Object? data, {int status = 200}) => Response(
       status,
       body: jsonEncode(data),
@@ -101,6 +111,9 @@ Router _buildRouter() {
     if (hash != user['password_hash']) {
       return _json({'error': 'Usuario o contrasena incorrectos'}, status: 401);
     }
+    if (user['active'] == '0') {
+      return _json({'error': 'Cuenta deshabilitada'}, status: 401);
+    }
     final token = _newToken();
     _sessions[token] = {
       'id': user['id'],
@@ -115,6 +128,79 @@ Router _buildRouter() {
     final header = request.headers['authorization'] ?? '';
     _sessions.remove(
         header.startsWith('Bearer ') ? header.substring(7) : '');
+    return _json({'ok': true});
+  });
+
+  // ---------- Usuarios (solo administrador) ----------
+  Response? requireAdmin(Request request) {
+    final session = _sessionOf(request);
+    if (session == null || session['role'] != 'admin') {
+      return _json({'error': 'solo el administrador puede gestionar usuarios'},
+          status: 403);
+    }
+    return null;
+  }
+
+  router.get('/users', (Request request) async {
+    final denied = requireAdmin(request);
+    if (denied != null) return denied;
+    final result = await pool.execute(
+        'SELECT id, username, full_name, role, active FROM users ORDER BY username');
+    return _json(_rows(result));
+  });
+
+  router.post('/users', (Request request) async {
+    final denied = requireAdmin(request);
+    if (denied != null) return denied;
+    final b = await _body(request);
+    final role = b['role']?.toString() ?? '';
+    // Por API solo se crean cuentas no-administrador.
+    if (!{'recepcion', 'odontologo'}.contains(role)) {
+      return _json({'error': 'rol invalido: use recepcion u odontologo'},
+          status: 400);
+    }
+    final username = b['username']?.toString().trim() ?? '';
+    final password = b['password']?.toString() ?? '';
+    if (username.isEmpty || password.length < 6) {
+      return _json(
+          {'error': 'usuario requerido y contrasena de al menos 6 caracteres'},
+          status: 400);
+    }
+    final exists = await pool.execute(
+        'SELECT id FROM users WHERE username = :u', {'u': username});
+    if (exists.rows.isNotEmpty) {
+      return _json({'error': 'el usuario ya existe'}, status: 409);
+    }
+    final salt = _newSalt();
+    final result = await pool.execute(
+      '''INSERT INTO users (username, password_hash, salt, full_name, role)
+         VALUES (:username, :hash, :salt, :fullName, :role)''',
+      {
+        'username': username,
+        'hash': _hashPassword(salt, password),
+        'salt': salt,
+        'fullName': b['full_name'] ?? username,
+        'role': role,
+      },
+    );
+    return _json({'id': result.lastInsertID.toInt()}, status: 201);
+  });
+
+  router.patch('/users/<id>/active', (Request request, String id) async {
+    final denied = requireAdmin(request);
+    if (denied != null) return denied;
+    final target = await pool
+        .execute('SELECT role FROM users WHERE id = :id', {'id': id});
+    if (target.rows.isEmpty) return _json({'error': 'no existe'}, status: 404);
+    if (target.rows.first.assoc()['role'] == 'admin') {
+      return _json({'error': 'no se puede deshabilitar al administrador'},
+          status: 403);
+    }
+    final b = await _body(request);
+    await pool.execute(
+      'UPDATE users SET active = :active WHERE id = :id',
+      {'active': b['active'] == true ? 1 : 0, 'id': id},
+    );
     return _json({'ok': true});
   });
 

@@ -3,13 +3,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/appointments/presentation/pages/appointments_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
-import '../../features/billing/presentation/pages/billing_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/patients/domain/entities/patient.dart';
 import '../../features/patients/presentation/pages/patient_history_page.dart';
 import '../../features/patients/presentation/pages/patients_page.dart';
 import '../../features/reports/presentation/pages/reports_page.dart';
-import '../../features/treatments/presentation/pages/treatments_page.dart';
+import '../../features/users/presentation/pages/users_page.dart';
 import '../auth/session.dart';
 import '../widgets/main_layout.dart';
 
@@ -40,9 +39,8 @@ class AppRouter {
           _tab('/dashboard', const DashboardPage()),
           _tab('/patients', const PatientsPage()),
           _tab('/appointments', const AppointmentsPage()),
-          _tab('/treatments', const TreatmentsPage()),
-          _tab('/billing', const BillingPage()),
           _tab('/reports', const ReportsPage()),
+          _tab('/users', const UsersPage()),
           // La historia clinica se abre "encima" de pacientes: aqui si dejamos
           // una transicion suave de fundido.
           GoRoute(

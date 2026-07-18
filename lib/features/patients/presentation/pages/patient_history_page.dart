@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/pdf/pdf_exporter.dart';
 import '../../data/repositories/clinical_record_repository.dart';
 import '../../domain/entities/clinical_record.dart';
 import '../../domain/entities/patient.dart';
@@ -70,7 +71,22 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   Widget build(BuildContext context) {
     final p = widget.patient;
     return Scaffold(
-      appBar: AppBar(title: Text('Historia clinica — ${p.fullName}')),
+      appBar: AppBar(
+        title: Text('Historia clinica — ${p.fullName}'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: FilledButton.icon(
+              onPressed: _loading
+                  ? null
+                  : () => PdfExporter.patientHistory(
+                      patient: p, records: _records),
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('Exportar PDF'),
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addRecord,
         icon: const Icon(Icons.note_add_outlined),

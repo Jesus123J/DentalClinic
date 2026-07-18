@@ -4,12 +4,15 @@ Sistema odontológico en **Flutter** que funciona como **app web** y también de
 
 ## Funcionalidades
 
-- **Login**: autenticación con usuarios en MySQL y token de sesión (usuario inicial: `admin` / `admin123`).
+- **Login**: autenticación con usuarios en MySQL y token de sesión.
+- **Cuentas** (solo admin): crear cuentas de recepción/odontólogo y habilitar/deshabilitar cuentas.
 - **Pacientes**: registro, edición, búsqueda por nombre/DNI y eliminación.
 - **Citas**: agenda por día, nueva cita con paciente/fecha/hora/motivo, estados (pendiente, atendida, cancelada).
-- **Historia clínica**: registros por paciente (fecha, diagnóstico, tratamiento, observaciones).
-- **Reportes**: atenciones por rango de fechas con conteo total.
+- **Historia clínica**: registros por paciente (fecha, diagnóstico, tratamiento, observaciones) con **exportación a PDF**.
+- **Reportes**: atenciones por rango de fechas con conteo total y **exportación a PDF**.
 - **Dashboard**: pacientes registrados, citas de hoy y citas pendientes.
+
+Usuarios de ejemplo: `admin`/`admin123`, `recepcion`/`recepcion123`, `doctor`/`doctor123` (⚠️ cambiar antes de publicar).
 
 ## Tecnologías
 

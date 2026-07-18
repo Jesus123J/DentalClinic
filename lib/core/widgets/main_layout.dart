@@ -10,14 +10,16 @@ class MainLayout extends StatelessWidget {
 
   final Widget child;
 
-  static const _destinations = [
-    (route: '/dashboard', icon: Icons.dashboard_outlined, label: 'Dashboard'),
-    (route: '/patients', icon: Icons.people_outline, label: 'Pacientes'),
-    (route: '/appointments', icon: Icons.calendar_month_outlined, label: 'Citas'),
-    (route: '/treatments', icon: Icons.medical_services_outlined, label: 'Tratamientos'),
-    (route: '/billing', icon: Icons.receipt_long_outlined, label: 'Facturacion'),
-    (route: '/reports', icon: Icons.bar_chart_outlined, label: 'Reportes'),
-  ];
+  /// La pestana Usuarios solo aparece para el administrador.
+  static List<({String route, IconData icon, String label})>
+      get _destinations => [
+            (route: '/dashboard', icon: Icons.dashboard_outlined, label: 'Dashboard'),
+            (route: '/patients', icon: Icons.people_outline, label: 'Pacientes'),
+            (route: '/appointments', icon: Icons.calendar_month_outlined, label: 'Citas'),
+            (route: '/reports', icon: Icons.bar_chart_outlined, label: 'Reportes'),
+            if (Session.role == 'admin')
+              (route: '/users', icon: Icons.manage_accounts_outlined, label: 'Usuarios'),
+          ];
 
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;

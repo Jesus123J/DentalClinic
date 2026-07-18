@@ -37,12 +37,11 @@ flowchart TB
 | Módulo | Estado | Responsabilidad |
 |---|---|---|
 | `auth` | ✅ | Login con usuarios en MySQL; token de sesión que protege toda la API |
+| `users` | ✅ | Solo admin: crear cuentas (recepción/odontólogo) y habilitar/deshabilitar |
 | `dashboard` | ✅ | Indicadores: pacientes registrados, citas de hoy, pendientes |
-| `patients` | ✅ | CRUD de pacientes + historia clínica (diagnóstico, tratamiento, observaciones) |
+| `patients` | ✅ | CRUD de pacientes + historia clínica con exportación a PDF |
 | `appointments` | ✅ | Agenda por día: crear citas y cambiar estado |
-| `reports` | ✅ | Reporte de atenciones por rango de fechas |
-| `treatments` | ⏳ | Tratamientos por pieza dental (pendiente) |
-| `billing` | ⏳ | Facturación y pagos (pendiente) |
+| `reports` | ✅ | Reporte de atenciones por rango de fechas con exportación a PDF |
 
 ## Modelo de datos (MySQL)
 

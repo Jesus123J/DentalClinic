@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/pdf/pdf_exporter.dart';
 import '../../data/repositories/report_repository.dart';
 
 /// Reporte de atenciones de pacientes por rango de fechas.
@@ -85,6 +86,15 @@ class _ReportsPageState extends State<ReportsPage> {
               const Spacer(),
               Text('${_rows.length} atenciones',
                   style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(width: 16),
+              FilledButton.icon(
+                onPressed: _rows.isEmpty
+                    ? null
+                    : () => PdfExporter.appointmentsReport(
+                        from: _from, to: _to, rows: _rows),
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                label: const Text('Exportar PDF'),
+              ),
             ],
           ),
           const SizedBox(height: 16),
