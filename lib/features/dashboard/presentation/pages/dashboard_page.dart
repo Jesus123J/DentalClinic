@@ -65,27 +65,53 @@ class _DashboardPageState extends State<DashboardPage> {
           else if (_stats == null)
             const Center(child: CircularProgressIndicator())
           else
-            Row(
-              children: [
-                _StatCard(
-                  icon: Icons.people_outline,
-                  label: 'Pacientes registrados',
-                  value: '${_stats!.totalPatients}',
-                  color: Colors.teal,
-                ),
-                _StatCard(
-                  icon: Icons.today_outlined,
-                  label: 'Citas de hoy',
-                  value: '${_stats!.todayAppointments}',
-                  color: Colors.indigo,
-                ),
-                _StatCard(
-                  icon: Icons.pending_actions_outlined,
-                  label: 'Citas pendientes',
-                  value: '${_stats!.pendingAppointments}',
-                  color: Colors.orange,
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cards = [
+                  _StatCard(
+                    icon: Icons.people_outline,
+                    label: 'Pacientes registrados',
+                    value: '${_stats!.totalPatients}',
+                    color: Colors.teal,
+                  ),
+                  _StatCard(
+                    icon: Icons.today_outlined,
+                    label: 'Citas de hoy',
+                    value: '${_stats!.todayAppointments}',
+                    color: Colors.indigo,
+                  ),
+                  _StatCard(
+                    icon: Icons.pending_actions_outlined,
+                    label: 'Citas pendientes',
+                    value: '${_stats!.pendingAppointments}',
+                    color: Colors.orange,
+                  ),
+                ];
+                // En pantallas angostas las tarjetas se apilan en vertical.
+                if (constraints.maxWidth < 720) {
+                  return Column(
+                    children: [
+                      for (final c in cards)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SizedBox(
+                              width: double.infinity, child: c),
+                        ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    for (final c in cards)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: c,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
         ],
       ),
@@ -108,28 +134,33 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 26,
-                backgroundColor: color.withValues(alpha: 0.15),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Column(
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundColor: color.withValues(alpha: 0.15),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(value,
                       style: Theme.of(context).textTheme.headlineMedium),
-                  Text(label, style: Theme.of(context).textTheme.bodyMedium),
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

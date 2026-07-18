@@ -110,17 +110,18 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text('Citas', style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(width: 24),
               OutlinedButton.icon(
                 onPressed: _pickDate,
                 icon: const Icon(Icons.event),
                 label: Text(
                     DateFormat('EEEE dd/MM/yyyy', 'es').format(_selectedDate)),
               ),
-              const Spacer(),
               FilledButton.icon(
                 onPressed: _create,
                 icon: const Icon(Icons.add),

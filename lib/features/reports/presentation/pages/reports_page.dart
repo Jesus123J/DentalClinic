@@ -73,20 +73,20 @@ class _ReportsPageState extends State<ReportsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text('Reporte de pacientes',
                   style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(width: 24),
               OutlinedButton.icon(
                 onPressed: _pickRange,
                 icon: const Icon(Icons.date_range),
                 label: Text('${fmt.format(_from)} — ${fmt.format(_to)}'),
               ),
-              const Spacer(),
               Text('${_rows.length} atenciones',
                   style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(width: 16),
               FilledButton.icon(
                 onPressed: _rows.isEmpty
                     ? null
@@ -123,28 +123,33 @@ class _ReportsPageState extends State<ReportsPage> {
           child: Text('Sin citas registradas en este rango de fechas.'));
     }
     return Card(
-      child: SingleChildScrollView(
-        child: SizedBox(
-          width: double.infinity,
-          child: DataTable(
-            columns: const [
-              DataColumn(label: Text('Fecha y hora')),
-              DataColumn(label: Text('Paciente')),
-              DataColumn(label: Text('DNI')),
-              DataColumn(label: Text('Motivo')),
-              DataColumn(label: Text('Estado')),
-            ],
-            rows: [
-              for (final r in _rows)
-                DataRow(cells: [
-                  DataCell(
-                      Text(DateFormat('dd/MM/yyyy HH:mm').format(r.dateTime))),
-                  DataCell(Text(r.patientName)),
-                  DataCell(Text(r.documentId)),
-                  DataCell(Text(r.reason)),
-                  DataCell(Text(r.status)),
-                ]),
-            ],
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Fecha y hora')),
+                  DataColumn(label: Text('Paciente')),
+                  DataColumn(label: Text('DNI')),
+                  DataColumn(label: Text('Motivo')),
+                  DataColumn(label: Text('Estado')),
+                ],
+                rows: [
+                  for (final r in _rows)
+                    DataRow(cells: [
+                      DataCell(Text(
+                          DateFormat('dd/MM/yyyy HH:mm').format(r.dateTime))),
+                      DataCell(Text(r.patientName)),
+                      DataCell(Text(r.documentId)),
+                      DataCell(Text(r.reason)),
+                      DataCell(Text(r.status)),
+                    ]),
+                ],
+              ),
+            ),
           ),
         ),
       ),

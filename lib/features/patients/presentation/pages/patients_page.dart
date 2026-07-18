@@ -99,13 +99,15 @@ class _PatientsPageState extends State<PatientsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text('Pacientes',
                   style: Theme.of(context).textTheme.headlineMedium),
-              const Spacer(),
               SizedBox(
-                width: 320,
+                width: 300,
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -118,7 +120,6 @@ class _PatientsPageState extends State<PatientsPage> {
                   onSubmitted: (_) => _load(),
                 ),
               ),
-              const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: _create,
                 icon: const Icon(Icons.person_add),
@@ -151,10 +152,13 @@ class _PatientsPageState extends State<PatientsPage> {
       return const Center(child: Text('No hay pacientes registrados.'));
     }
     return Card(
-      child: SingleChildScrollView(
-        child: SizedBox(
-          width: double.infinity,
-          child: DataTable(
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: DataTable(
             columns: const [
               DataColumn(label: Text('Paciente')),
               DataColumn(label: Text('DNI')),
@@ -192,6 +196,8 @@ class _PatientsPageState extends State<PatientsPage> {
                   ])),
                 ]),
             ],
+              ),
+            ),
           ),
         ),
       ),
