@@ -38,5 +38,21 @@ CREATE TABLE IF NOT EXISTS clinical_records (
     REFERENCES patients(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  password_hash CHAR(64) NOT NULL,
+  salt VARCHAR(32) NOT NULL,
+  full_name VARCHAR(120) NOT NULL,
+  role ENUM('admin','odontologo','recepcion') NOT NULL DEFAULT 'recepcion',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Usuario inicial: admin / admin123 (cambiar la contrasena en produccion).
+-- password_hash = SHA256(salt + contrasena)
+INSERT IGNORE INTO users (username, password_hash, salt, full_name, role) VALUES
+('admin', '965c41d79a8ca21c8656feba892b8ab5d722f8c2d79194b07fca012f199ad6df',
+ 'f3a9c1d27b5e4816', 'Administrador', 'admin');
+
 CREATE INDEX idx_appointments_date ON appointments(date_time);
 CREATE INDEX idx_clinical_records_patient ON clinical_records(patient_id, record_date);

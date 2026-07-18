@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../auth/session.dart';
+import '../../features/auth/data/repositories/auth_repository.dart';
+
 /// Layout principal de escritorio: menu lateral fijo + contenido.
 class MainLayout extends StatelessWidget {
   const MainLayout({super.key, required this.child});
@@ -37,6 +40,32 @@ class MainLayout extends StatelessWidget {
             leading: const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Icon(Icons.local_hospital, size: 40),
+            ),
+            trailing: Expanded(
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        Session.fullName ?? '',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      TextButton.icon(
+                        onPressed: () async {
+                          await AuthRepository().logout();
+                          if (context.mounted) context.go('/login');
+                        },
+                        icon: const Icon(Icons.logout, size: 18),
+                        label: const Text('Cerrar sesion'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
             destinations: [
               for (final d in _destinations)

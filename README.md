@@ -4,6 +4,7 @@ Sistema odontológico en **Flutter** que funciona como **app web** y también de
 
 ## Funcionalidades
 
+- **Login**: autenticación con usuarios en MySQL y token de sesión (usuario inicial: `admin` / `admin123`).
 - **Pacientes**: registro, edición, búsqueda por nombre/DNI y eliminación.
 - **Citas**: agenda por día, nueva cita con paciente/fecha/hora/motivo, estados (pendiente, atendida, cancelada).
 - **Historia clínica**: registros por paciente (fecha, diagnóstico, tratamiento, observaciones).
@@ -49,6 +50,8 @@ flutter run -d windows    # versión escritorio
 ```
 
 Si la API corre en otra máquina o puerto, cambia `baseUrl` en `lib/core/api/api_client.dart`.
+
+**4. Iniciar sesión** con el usuario inicial `admin` / `admin123` (⚠️ cámbialo antes de publicar en internet). Todos los endpoints de la API, excepto el login, exigen el token de sesión.
 
 ## Arquitectura
 

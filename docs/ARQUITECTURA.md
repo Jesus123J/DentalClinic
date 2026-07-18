@@ -36,6 +36,7 @@ flowchart TB
 
 | Módulo | Estado | Responsabilidad |
 |---|---|---|
+| `auth` | ✅ | Login con usuarios en MySQL; token de sesión que protege toda la API |
 | `dashboard` | ✅ | Indicadores: pacientes registrados, citas de hoy, pendientes |
 | `patients` | ✅ | CRUD de pacientes + historia clínica (diagnóstico, tratamiento, observaciones) |
 | `appointments` | ✅ | Agenda por día: crear citas y cambiar estado |

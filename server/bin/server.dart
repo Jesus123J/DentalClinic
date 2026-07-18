@@ -3,7 +3,9 @@
 // ignore_for_file: avoid_print
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:mysql_client/mysql_client.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -18,6 +20,16 @@ const dbName = 'dental_clinic';
 const serverPort = 8090;
 
 late final MySQLConnectionPool pool;
+
+/// Sesiones activas: token -> datos del usuario.
+final Map<String, Map<String, dynamic>> _sessions = {};
+final Random _random = Random.secure();
+
+String _newToken() =>
+    base64UrlEncode(List<int>.generate(32, (_) => _random.nextInt(256)));
+
+String _hashPassword(String salt, String password) =>
+    sha256.convert(utf8.encode('$salt$password')).toString();
 
 Response _json(Object? data, {int status = 200}) => Response(
       status,
@@ -48,10 +60,62 @@ Middleware _cors() {
   };
 }
 
+/// Exige un token valido en el header "Authorization: Bearer token",
+/// excepto para /health y /auth/login.
+Middleware _auth() {
+  const publicPaths = {'health', 'auth/login'};
+  return (Handler handler) {
+    return (Request request) async {
+      if (request.method == 'OPTIONS' ||
+          publicPaths.contains(request.url.path)) {
+        return handler(request);
+      }
+      final header = request.headers['authorization'] ?? '';
+      final token = header.startsWith('Bearer ') ? header.substring(7) : '';
+      if (!_sessions.containsKey(token)) {
+        return _json({'error': 'no autorizado'}, status: 401);
+      }
+      return handler(request);
+    };
+  };
+}
+
 Router _buildRouter() {
   final router = Router();
 
   router.get('/health', (Request _) => _json({'ok': true}));
+
+  // ---------- Autenticacion ----------
+  router.post('/auth/login', (Request request) async {
+    final b = await _body(request);
+    final result = await pool.execute(
+      'SELECT * FROM users WHERE username = :username',
+      {'username': b['username']},
+    );
+    if (result.rows.isEmpty) {
+      return _json({'error': 'Usuario o contrasena incorrectos'}, status: 401);
+    }
+    final user = result.rows.first.assoc();
+    final hash = _hashPassword(user['salt']!, b['password']?.toString() ?? '');
+    if (hash != user['password_hash']) {
+      return _json({'error': 'Usuario o contrasena incorrectos'}, status: 401);
+    }
+    final token = _newToken();
+    _sessions[token] = {
+      'id': user['id'],
+      'username': user['username'],
+      'full_name': user['full_name'],
+      'role': user['role'],
+    };
+    return _json({'token': token, 'user': _sessions[token]});
+  });
+
+  router.post('/auth/logout', (Request request) async {
+    final header = request.headers['authorization'] ?? '';
+    _sessions.remove(
+        header.startsWith('Bearer ') ? header.substring(7) : '');
+    return _json({'ok': true});
+  });
 
   // ---------- Pacientes ----------
   router.get('/patients', (Request request) async {
@@ -244,6 +308,7 @@ Future<void> main() async {
   final handler = const Pipeline()
       .addMiddleware(logRequests())
       .addMiddleware(_cors())
+      .addMiddleware(_auth())
       .addHandler(_buildRouter().call);
 
   final server = await shelf_io.serve(handler, InternetAddress.anyIPv4, serverPort);
