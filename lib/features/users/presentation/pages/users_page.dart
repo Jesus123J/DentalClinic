@@ -274,6 +274,7 @@ class _UserFormDialogState extends State<_UserFormDialog> {
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: _role,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Rol'),
                 items: const [
                   DropdownMenuItem(

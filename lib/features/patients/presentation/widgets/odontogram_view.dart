@@ -298,6 +298,7 @@ class _ToothDialogState extends State<_ToothDialog> {
           children: [
             DropdownButtonFormField<ToothStatus>(
               initialValue: _status,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Estado'),
               items: [
                 for (final s in ToothStatus.values)
@@ -319,7 +320,10 @@ class _ToothDialogState extends State<_ToothDialog> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(s.label),
+                        Flexible(
+                          child: Text(s.label,
+                              overflow: TextOverflow.ellipsis, maxLines: 1),
+                        ),
                       ],
                     ),
                   ),

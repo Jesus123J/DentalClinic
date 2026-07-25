@@ -409,10 +409,15 @@ class _AppointmentFormDialogState extends State<_AppointmentFormDialog> {
                 style: Theme.of(context).textTheme.bodySmall),
             DropdownButtonFormField<Patient>(
               initialValue: _selectedPatient,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Paciente *'),
               items: [
                 for (final p in _patients)
-                  DropdownMenuItem(value: p, child: Text(p.fullName)),
+                  DropdownMenuItem(
+                    value: p,
+                    child: Text(p.fullName,
+                        overflow: TextOverflow.ellipsis, maxLines: 1),
+                  ),
               ],
               onChanged: (p) => setState(() => _selectedPatient = p),
             ),

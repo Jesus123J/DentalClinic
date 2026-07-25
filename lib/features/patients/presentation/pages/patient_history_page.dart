@@ -348,11 +348,16 @@ class _RecordFormDialogState extends State<_RecordFormDialog> {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: _procedureType,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                           labelText: 'Procedimiento (opcional)'),
                       items: [
                         for (final t in kProcedureTypes)
-                          DropdownMenuItem(value: t, child: Text(t)),
+                          DropdownMenuItem(
+                            value: t,
+                            child: Text(t,
+                                overflow: TextOverflow.ellipsis, maxLines: 1),
+                          ),
                       ],
                       onChanged: (v) => setState(() => _procedureType = v),
                     ),
