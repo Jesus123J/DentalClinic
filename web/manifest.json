@@ -1,11 +1,11 @@
-{
-    "name": "dental_clinic",
-    "short_name": "dental_clinic",
+﻿{
+    "name": "ProDentist Peru",
+    "short_name": "ProDentist",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Sistema de gestion odontologica",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
@@ -33,3 +33,4 @@
         }
     ]
 }
+

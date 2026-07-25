@@ -2,7 +2,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'Clinica Dental';
-  static const String dbName = 'dental_clinic.db';
-  static const int dbVersion = 1;
+  static const String appName = 'ProDentist';
+  static const String appSubtitle = 'Peru';
+  static const String logoAsset = 'assets/images/logo.jpg';
 }

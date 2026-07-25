@@ -60,5 +60,14 @@ INSERT IGNORE INTO users (username, password_hash, salt, full_name, role) VALUES
 ('doctor', 'aebbf179945111d3cf6cd4eb119169f06faebe9dc2b9d0fc21c668b0d94d20a8',
  '2b7c9e4a6d1f8350', 'Dr. Juan Perez', 'odontologo');
 
+-- Tokens de sesion (usados por la API PHP; la API Dart los guarda en memoria)
+CREATE TABLE IF NOT EXISTS sessions (
+  token VARCHAR(64) PRIMARY KEY,
+  user_id INT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id)
+    REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE INDEX idx_appointments_date ON appointments(date_time);
 CREATE INDEX idx_clinical_records_patient ON clinical_records(patient_id, record_date);

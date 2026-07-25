@@ -1,6 +1,10 @@
-# 🦷 Dental Clinic — Sistema de Gestión
+# 🦷 ProDentist Perú — Sistema de Gestión Odontológica
 
-Sistema odontológico en **Flutter** que funciona como **app web** y también de **escritorio (Windows)**: registro de pacientes, agenda de citas, historia clínica y reporte de atenciones por fecha, con base de datos **MySQL** a través de una **API REST en Dart**.
+Sistema odontológico en **Flutter** con diseño web moderno, que funciona como **app web** y también de **escritorio (Windows)**: registro de pacientes, agenda de citas, historia clínica y reporte de atenciones por fecha, con base de datos **MySQL**.
+
+Tiene **dos backends equivalentes** (mismos endpoints):
+- `api/` — **PHP** (PDO), listo para subir a **cPanel** (producción).
+- `server/` — **Dart** (shelf), cómodo para desarrollo local.
 
 ## Funcionalidades
 
@@ -18,14 +22,13 @@ Usuarios de ejemplo: `admin`/`admin123`, `recepcion`/`recepcion123`, `doctor`/`d
 
 | Tecnología | Uso |
 |---|---|
-| Flutter 3.x (Web y Windows) | Interfaz de usuario |
-| Dart + `shelf` (`server/`) | API REST |
-| MySQL 8 (`mysql_client`) | Base de datos |
-| `http` | Consumo de la API desde la app |
-| `go_router` | Navegación declarativa |
-| `intl` + `flutter_localizations` | Fechas y UI en español |
+| Flutter 3.x (Web y Windows) | Interfaz de usuario (tema ProDentist: dorado/plata, Poppins) |
+| PHP 7.4+ (`api/`) | API REST para producción en cPanel |
+| Dart + `shelf` (`server/`) | API REST para desarrollo local |
+| MySQL | Base de datos |
+| `go_router`, `http`, `pdf`/`printing` | Navegación, API y exportación PDF |
 
-> El navegador no puede conectarse directamente a MySQL, por eso la app (web o escritorio) consume la API REST de `server/`, y es el servidor quien habla con MySQL.
+> El navegador no puede conectarse directamente a MySQL, por eso la app (web o escritorio) consume una API REST, y es el servidor quien habla con MySQL.
 
 ## Cómo ejecutar
 
@@ -36,12 +39,17 @@ mysql -u root -p < docs/database/schema.sql   # crea la base y tablas
 mysql -u root -p < docs/database/seed.sql     # (opcional) datos de ejemplo
 ```
 
-**2. Servidor API** (credenciales de MySQL en `server/bin/server.dart`):
+**2. Servidor API** — elige uno de los dos:
 
 ```bash
+# Opción A: Dart (desarrollo)
 cd server
 dart pub get
-dart run bin/server.dart     # queda escuchando en http://localhost:8090
+dart run bin/server.dart     # escucha en http://localhost:8090
+
+# Opción B: PHP (el mismo que va a cPanel; credenciales en api/config.php)
+cd api
+php -S localhost:8090 index.php
 ```
 
 **3. La app** (en otra terminal):
@@ -55,6 +63,19 @@ flutter run -d windows    # versión escritorio
 Si la API corre en otra máquina o puerto, cambia `baseUrl` en `lib/core/api/api_client.dart`.
 
 **4. Iniciar sesión** con el usuario inicial `admin` / `admin123` (⚠️ cámbialo antes de publicar en internet). Todos los endpoints de la API, excepto el login, exigen el token de sesión.
+
+## Publicar en cPanel
+
+1. **Base de datos**: en cPanel crea la base y el usuario MySQL, e importa `docs/database/schema.sql` (y `seed.sql` si quieres datos de prueba) desde phpMyAdmin.
+2. **API**: sube la carpeta `api/` a `public_html/api/` y edita `api/config.php` con las credenciales de la base creada (formato `usuariocpanel_dental`).
+3. **La app web**: compílala apuntando a tu dominio y sube el resultado:
+
+   ```bash
+   flutter build web --dart-define=API_URL=https://tudominio.com/api
+   ```
+
+   Sube el contenido de `build/web/` a `public_html/`.
+4. Abre `https://tudominio.com`, inicia sesión y listo. ⚠️ Antes de publicar cambia las contraseñas de los usuarios de ejemplo.
 
 ## Arquitectura
 

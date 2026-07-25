@@ -9,8 +9,13 @@ class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
 
-  /// Direccion del servidor API. Cambiar si el servidor corre en otra maquina.
-  static const String baseUrl = 'http://localhost:8090';
+  /// Direccion del servidor API.
+  /// En desarrollo apunta al servidor local; para produccion compilar con:
+  /// flutter build web --dart-define=API_URL=https://tudominio.com/api
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'http://localhost:8090',
+  );
 
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('$baseUrl$path').replace(queryParameters: query);

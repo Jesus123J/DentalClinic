@@ -15,12 +15,26 @@ class PdfExporter {
   static final _date = DateFormat('dd/MM/yyyy');
   static final _dateTime = DateFormat('dd/MM/yyyy HH:mm');
 
+  static const _gold = PdfColor.fromInt(0xFFD9A521);
+
   static pw.Widget _header(String title, String subtitle) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text('Clinica Dental',
+          pw.RichText(
+            text: pw.TextSpan(
               style: pw.TextStyle(
-                  fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                  fontSize: 20, fontWeight: pw.FontWeight.bold),
+              children: [
+                const pw.TextSpan(
+                    text: 'Pro', style: pw.TextStyle(color: _gold)),
+                const pw.TextSpan(text: 'Dentist '),
+                pw.TextSpan(
+                    text: 'Peru',
+                    style: pw.TextStyle(
+                        fontSize: 11, color: PdfColors.grey600)),
+              ],
+            ),
+          ),
           pw.SizedBox(height: 4),
           pw.Text(title, style: const pw.TextStyle(fontSize: 14)),
           pw.Text(subtitle,
@@ -72,8 +86,7 @@ class PdfExporter {
             ],
             headerStyle: pw.TextStyle(
                 fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-            headerDecoration:
-                const pw.BoxDecoration(color: PdfColors.teal700),
+            headerDecoration: const pw.BoxDecoration(color: _gold),
             cellStyle: const pw.TextStyle(fontSize: 9),
             cellAlignments: {0: pw.Alignment.centerLeft},
             oddRowDecoration:

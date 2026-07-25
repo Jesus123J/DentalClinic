@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../../reports/data/repositories/report_repository.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -72,13 +73,13 @@ class _DashboardPageState extends State<DashboardPage> {
                     icon: Icons.people_outline,
                     label: 'Pacientes registrados',
                     value: '${_stats!.totalPatients}',
-                    color: Colors.teal,
+                    color: AppTheme.gold,
                   ),
                   _StatCard(
                     icon: Icons.today_outlined,
                     label: 'Citas de hoy',
                     value: '${_stats!.todayAppointments}',
-                    color: Colors.indigo,
+                    color: AppTheme.silver,
                   ),
                   _StatCard(
                     icon: Icons.pending_actions_outlined,

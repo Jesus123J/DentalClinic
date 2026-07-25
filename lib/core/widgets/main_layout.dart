@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../auth/session.dart';
 import '../../features/auth/data/repositories/auth_repository.dart';
+import '../auth/session.dart';
+import '../constants/app_constants.dart';
+import '../theme/app_theme.dart';
 
-/// Layout principal responsive:
-/// - Ancho >= 1100: menu lateral extendido (icono + texto).
-/// - Entre 800 y 1100: menu lateral compacto (solo iconos).
+/// Layout principal responsive estilo web app:
+/// - Ancho >= 1100: sidebar oscuro extendido con logo y texto.
+/// - Entre 800 y 1100: sidebar compacto (solo iconos).
 /// - Menor a 800: barra superior con menu hamburguesa (Drawer).
 class MainLayout extends StatelessWidget {
   const MainLayout({super.key, required this.child});
@@ -47,61 +49,37 @@ class MainLayout extends StatelessWidget {
     );
   }
 
-  // ---------- Escritorio / pantalla ancha ----------
+  // ---------- Pantalla ancha: sidebar oscuro ----------
   Widget _buildDesktop(BuildContext context, {required bool extended}) {
+    final selected = _currentIndex(context);
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
-            extended: extended,
-            minExtendedWidth: 200,
-            labelType: extended ? null : NavigationRailLabelType.all,
-            selectedIndex: _currentIndex(context),
-            onDestinationSelected: (index) =>
-                context.go(_destinations[index].route),
-            leading: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Icon(Icons.local_hospital, size: 40),
-            ),
-            trailing: Expanded(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: extended
-                      ? Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              Session.fullName ?? '',
-                              style: Theme.of(context).textTheme.bodySmall,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            TextButton.icon(
-                              onPressed: () => _logout(context),
-                              icon: const Icon(Icons.logout, size: 18),
-                              label: const Text('Cerrar sesion'),
-                            ),
-                          ],
-                        )
-                      : IconButton(
-                          tooltip: 'Cerrar sesion (${Session.fullName ?? ''})',
-                          onPressed: () => _logout(context),
-                          icon: const Icon(Icons.logout),
-                        ),
+          Container(
+            width: extended ? 240 : 76,
+            color: AppTheme.charcoal,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 24),
+                _Brand(extended: extended),
+                const SizedBox(height: 28),
+                for (var i = 0; i < _destinations.length; i++)
+                  _MenuItem(
+                    destination: _destinations[i],
+                    selected: i == selected,
+                    extended: extended,
+                    onTap: () => context.go(_destinations[i].route),
+                  ),
+                const Spacer(),
+                const Divider(color: Colors.white12, height: 1),
+                _UserFooter(
+                  extended: extended,
+                  onLogout: () => _logout(context),
                 ),
-              ),
+              ],
             ),
-            destinations: [
-              for (final d in _destinations)
-                NavigationRailDestination(
-                  icon: Icon(d.icon),
-                  label: Text(d.label),
-                ),
-            ],
           ),
-          const VerticalDivider(width: 1),
           Expanded(child: child),
         ],
       ),
@@ -112,48 +90,203 @@ class MainLayout extends StatelessWidget {
   Widget _buildMobile(BuildContext context) {
     final current = _destinations[_currentIndex(context)];
     return Scaffold(
-      appBar: AppBar(title: Text(current.label)),
+      appBar: AppBar(
+        title: Text(current.label),
+        backgroundColor: AppTheme.charcoal,
+        foregroundColor: Colors.white,
+      ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Icon(Icons.local_hospital, size: 40),
-                  const SizedBox(height: 8),
-                  Text('Clinica Dental',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  Text(Session.fullName ?? '',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-            for (final d in _destinations)
-              ListTile(
-                leading: Icon(d.icon),
-                title: Text(d.label),
-                selected: d.route == current.route,
-                onTap: () {
-                  Navigator.pop(context);
-                  context.go(d.route);
-                },
-              ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Cerrar sesion'),
-              onTap: () => _logout(context),
-            ),
-          ],
+        backgroundColor: AppTheme.charcoal,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 24),
+              const _Brand(extended: true),
+              const SizedBox(height: 28),
+              for (final d in _destinations)
+                _MenuItem(
+                  destination: d,
+                  selected: d.route == current.route,
+                  extended: true,
+                  onTap: () {
+                    Navigator.pop(context);
+                    context.go(d.route);
+                  },
+                ),
+              const Spacer(),
+              const Divider(color: Colors.white12, height: 1),
+              _UserFooter(extended: true, onLogout: () => _logout(context)),
+            ],
+          ),
         ),
       ),
       body: child,
+    );
+  }
+}
+
+/// Logo + nombre de la app en el sidebar.
+class _Brand extends StatelessWidget {
+  const _Brand({required this.extended});
+
+  final bool extended;
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.asset(
+        AppConstants.logoAsset,
+        width: extended ? 64 : 44,
+        height: extended ? 64 : 44,
+        fit: BoxFit.cover,
+      ),
+    );
+    if (!extended) return Center(child: logo);
+    return Column(
+      children: [
+        logo,
+        const SizedBox(height: 10),
+        RichText(
+          text: TextSpan(
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700),
+            children: const [
+              TextSpan(text: 'Pro', style: TextStyle(color: AppTheme.gold)),
+              TextSpan(text: 'Dentist', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+        Text(
+          AppConstants.appSubtitle,
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: AppTheme.silver, letterSpacing: 2),
+        ),
+      ],
+    );
+  }
+}
+
+/// Item del menu lateral con resaltado dorado redondeado.
+class _MenuItem extends StatelessWidget {
+  const _MenuItem({
+    required this.destination,
+    required this.selected,
+    required this.extended,
+    required this.onTap,
+  });
+
+  final ({String route, IconData icon, String label}) destination;
+  final bool selected;
+  final bool extended;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppTheme.gold : AppTheme.silver;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: Material(
+        color: selected
+            ? AppTheme.gold.withValues(alpha: 0.14)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: extended ? 14 : 0, vertical: 12),
+            child: extended
+                ? Row(
+                    children: [
+                      Icon(destination.icon, color: color, size: 22),
+                      const SizedBox(width: 12),
+                      Text(
+                        destination.label,
+                        style: TextStyle(
+                          color: selected ? Colors.white : AppTheme.silver,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  )
+                : Tooltip(
+                    message: destination.label,
+                    child: Icon(destination.icon, color: color, size: 24),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Usuario y cerrar sesion al pie del sidebar.
+class _UserFooter extends StatelessWidget {
+  const _UserFooter({required this.extended, required this.onLogout});
+
+  final bool extended;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!extended) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: IconButton(
+          tooltip: 'Cerrar sesion (${Session.fullName ?? ''})',
+          onPressed: onLogout,
+          icon: const Icon(Icons.logout, color: AppTheme.silver),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 17,
+            backgroundColor: AppTheme.gold.withValues(alpha: 0.2),
+            child: Text(
+              (Session.fullName ?? '?').isEmpty
+                  ? '?'
+                  : Session.fullName![0].toUpperCase(),
+              style: const TextStyle(
+                  color: AppTheme.gold, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  Session.fullName ?? '',
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  Session.role ?? '',
+                  style:
+                      const TextStyle(color: AppTheme.silver, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Cerrar sesion',
+            onPressed: onLogout,
+            icon: const Icon(Icons.logout, color: AppTheme.silver, size: 20),
+          ),
+        ],
+      ),
     );
   }
 }
