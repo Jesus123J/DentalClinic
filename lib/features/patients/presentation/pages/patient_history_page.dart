@@ -3,10 +3,13 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/pdf/pdf_exporter.dart';
 import '../../data/repositories/clinical_record_repository.dart';
+import '../../data/repositories/odontogram_repository.dart';
 import '../../domain/entities/clinical_record.dart';
 import '../../domain/entities/patient.dart';
+import '../widgets/odontogram_view.dart';
 
-/// Historia clinica de un paciente.
+/// Historia clinica odontologica de un paciente:
+/// odontograma interactivo + registros clinicos detallados.
 class PatientHistoryPage extends StatefulWidget {
   const PatientHistoryPage({super.key, required this.patient});
 
@@ -18,6 +21,7 @@ class PatientHistoryPage extends StatefulWidget {
 
 class _PatientHistoryPageState extends State<PatientHistoryPage> {
   final _repo = ClinicalRecordRepository();
+  final _odontogramRepo = OdontogramRepository();
   List<ClinicalRecord> _records = [];
   bool _loading = true;
 
@@ -67,97 +71,145 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
     _load();
   }
 
+  Future<void> _exportPdf() async {
+    final teeth = await _odontogramRepo.getByPatient(widget.patient.id!);
+    await PdfExporter.patientHistory(
+      patient: widget.patient,
+      records: _records,
+      teeth: teeth.values.toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = widget.patient;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Historia clinica — ${p.fullName}'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: FilledButton.icon(
-              onPressed: _loading
-                  ? null
-                  : () => PdfExporter.patientHistory(
-                      patient: p, records: _records),
-              icon: const Icon(Icons.picture_as_pdf_outlined),
-              label: const Text('Exportar PDF'),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Historia clinica — ${p.fullName}'),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: FilledButton.icon(
+                onPressed: _loading ? null : _exportPdf,
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                label: const Text('Exportar PDF'),
+              ),
             ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.grid_view_outlined), text: 'Odontograma'),
+              Tab(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  text: 'Registros clinicos'),
+            ],
           ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addRecord,
-        icon: const Icon(Icons.note_add_outlined),
-        label: const Text('Nuevo registro'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Wrap(
-                  spacing: 32,
-                  runSpacing: 8,
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _addRecord,
+          icon: const Icon(Icons.note_add_outlined),
+          label: const Text('Nuevo registro'),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Wrap(
+                    spacing: 32,
+                    runSpacing: 8,
+                    children: [
+                      _InfoChip(label: 'DNI', value: p.documentId ?? '-'),
+                      _InfoChip(label: 'Telefono', value: p.phone ?? '-'),
+                      _InfoChip(
+                        label: 'Nacimiento',
+                        value: p.birthDate == null
+                            ? '-'
+                            : DateFormat('dd/MM/yyyy').format(p.birthDate!),
+                      ),
+                      _InfoChip(
+                          label: 'Alergias', value: p.allergies ?? 'Ninguna'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: TabBarView(
                   children: [
-                    _InfoChip(label: 'DNI', value: p.documentId ?? '-'),
-                    _InfoChip(label: 'Telefono', value: p.phone ?? '-'),
-                    _InfoChip(
-                      label: 'Nacimiento',
-                      value: p.birthDate == null
-                          ? '-'
-                          : DateFormat('dd/MM/yyyy').format(p.birthDate!),
-                    ),
-                    _InfoChip(label: 'Alergias', value: p.allergies ?? 'Ninguna'),
+                    OdontogramView(patientId: p.id!),
+                    _buildRecords(),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _records.isEmpty
-                      ? const Center(
-                          child: Text('Sin registros en la historia clinica.'))
-                      : ListView.separated(
-                          itemCount: _records.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
-                          itemBuilder: (context, index) {
-                            final r = _records[index];
-                            return Card(
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  child: const Icon(Icons.medical_information_outlined),
-                                ),
-                                title: Text(r.diagnosis),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(DateFormat('dd/MM/yyyy')
-                                        .format(r.recordDate)),
-                                    if (r.treatment != null)
-                                      Text('Tratamiento: ${r.treatment}'),
-                                    if (r.observations != null)
-                                      Text('Obs.: ${r.observations}'),
-                                  ],
-                                ),
-                                trailing: IconButton(
-                                  tooltip: 'Eliminar',
-                                  icon: const Icon(Icons.delete_outline),
-                                  onPressed: () => _deleteRecord(r),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRecords() {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_records.isEmpty) {
+      return const Center(child: Text('Sin registros en la historia clinica.'));
+    }
+    return ListView.separated(
+      itemCount: _records.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final r = _records[index];
+        return Card(
+          child: ExpansionTile(
+            shape: const Border(),
+            leading: const CircleAvatar(
+              child: Icon(Icons.medical_information_outlined),
+            ),
+            title: Text(r.diagnosis),
+            subtitle: Text([
+              DateFormat('dd/MM/yyyy').format(r.recordDate),
+              if (r.tooth != null && r.tooth!.isNotEmpty) 'Pieza ${r.tooth}',
+              if (r.procedureType != null) r.procedureType!,
+            ].join('  ·  ')),
+            trailing: IconButton(
+              tooltip: 'Eliminar',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => _deleteRecord(r),
+            ),
+            childrenPadding: const EdgeInsets.fromLTRB(72, 0, 24, 16),
+            expandedCrossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _detail('Motivo de consulta', r.chiefComplaint),
+              _detail('Examen clinico', r.clinicalExam),
+              _detail('Tratamiento', r.treatment),
+              _detail('Receta / indicaciones', r.prescription),
+              _detail('Observaciones', r.observations),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _detail(String label, String? value) {
+    if (value == null || value.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelMedium
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+          Text(value),
+        ],
       ),
     );
   }
@@ -200,16 +252,29 @@ class _RecordFormDialog extends StatefulWidget {
 
 class _RecordFormDialogState extends State<_RecordFormDialog> {
   final _formKey = GlobalKey<FormState>();
+  final _chiefComplaint = TextEditingController();
+  final _tooth = TextEditingController();
   final _diagnosis = TextEditingController();
+  final _clinicalExam = TextEditingController();
   final _treatment = TextEditingController();
+  final _prescription = TextEditingController();
   final _observations = TextEditingController();
+  String? _procedureType;
   DateTime _date = DateTime.now();
 
   @override
   void dispose() {
-    _diagnosis.dispose();
-    _treatment.dispose();
-    _observations.dispose();
+    for (final c in [
+      _chiefComplaint,
+      _tooth,
+      _diagnosis,
+      _clinicalExam,
+      _treatment,
+      _prescription,
+      _observations,
+    ]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -231,7 +296,12 @@ class _RecordFormDialogState extends State<_RecordFormDialog> {
       patientId: widget.patientId,
       recordDate: _date,
       diagnosis: _diagnosis.text.trim(),
+      tooth: clean(_tooth),
+      procedureType: _procedureType,
+      chiefComplaint: clean(_chiefComplaint),
+      clinicalExam: clean(_clinicalExam),
       treatment: clean(_treatment),
+      prescription: clean(_prescription),
       observations: clean(_observations),
     ));
   }
@@ -241,40 +311,86 @@ class _RecordFormDialogState extends State<_RecordFormDialog> {
     return AlertDialog(
       title: const Text('Nuevo registro clinico'),
       content: SizedBox(
-        width: 480,
+        width: 560,
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 16,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.event),
-                  label: Text(DateFormat('dd/MM/yyyy').format(_date)),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 16,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.event),
+                    label: Text(DateFormat('dd/MM/yyyy').format(_date)),
+                  ),
                 ),
-              ),
-              TextFormField(
-                controller: _diagnosis,
-                decoration: const InputDecoration(labelText: 'Diagnostico *'),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Requerido' : null,
-              ),
-              TextFormField(
-                controller: _treatment,
-                decoration: const InputDecoration(
-                    labelText: 'Tratamiento (opcional)'),
-              ),
-              TextFormField(
-                controller: _observations,
-                decoration: const InputDecoration(
-                    labelText: 'Observaciones (opcional)'),
-                maxLines: 3,
-              ),
-            ],
+                TextFormField(
+                  controller: _chiefComplaint,
+                  decoration: const InputDecoration(
+                      labelText: 'Motivo de consulta (opcional)',
+                      hintText: 'Ej. dolor al masticar del lado derecho'),
+                ),
+                Row(children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _tooth,
+                      decoration: const InputDecoration(
+                          labelText: 'Pieza(s) dental(es) (opcional)',
+                          hintText: 'FDI, ej. 16 o 16, 24'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _procedureType,
+                      decoration: const InputDecoration(
+                          labelText: 'Procedimiento (opcional)'),
+                      items: [
+                        for (final t in kProcedureTypes)
+                          DropdownMenuItem(value: t, child: Text(t)),
+                      ],
+                      onChanged: (v) => setState(() => _procedureType = v),
+                    ),
+                  ),
+                ]),
+                TextFormField(
+                  controller: _diagnosis,
+                  decoration:
+                      const InputDecoration(labelText: 'Diagnostico *'),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Requerido' : null,
+                ),
+                TextFormField(
+                  controller: _clinicalExam,
+                  decoration: const InputDecoration(
+                      labelText: 'Examen clinico / hallazgos (opcional)'),
+                  maxLines: 2,
+                ),
+                TextFormField(
+                  controller: _treatment,
+                  decoration: const InputDecoration(
+                      labelText: 'Tratamiento realizado (opcional)'),
+                ),
+                TextFormField(
+                  controller: _prescription,
+                  decoration: const InputDecoration(
+                      labelText: 'Receta / indicaciones (opcional)',
+                      hintText: 'Ej. amoxicilina 500mg c/8h por 7 dias'),
+                  maxLines: 2,
+                ),
+                TextFormField(
+                  controller: _observations,
+                  decoration: const InputDecoration(
+                      labelText: 'Observaciones (opcional)'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
           ),
         ),
       ),

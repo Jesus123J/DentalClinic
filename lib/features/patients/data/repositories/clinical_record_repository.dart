@@ -13,7 +13,12 @@ class ClinicalRecordRepository {
         recordDate:
             DateTime.tryParse(json['record_date'] ?? '') ?? DateTime.now(),
         diagnosis: json['diagnosis'] ?? '',
+        tooth: json['tooth'],
+        procedureType: json['procedure_type'],
+        chiefComplaint: json['chief_complaint'],
+        clinicalExam: json['clinical_exam'],
         treatment: json['treatment'],
+        prescription: json['prescription'],
         observations: json['observations'],
       );
 
@@ -28,7 +33,12 @@ class ClinicalRecordRepository {
       'patient_id': record.patientId,
       'record_date': record.recordDate.toIso8601String().substring(0, 10),
       'diagnosis': record.diagnosis,
+      'tooth': record.tooth,
+      'procedure_type': record.procedureType,
+      'chief_complaint': record.chiefComplaint,
+      'clinical_exam': record.clinicalExam,
       'treatment': record.treatment,
+      'prescription': record.prescription,
       'observations': record.observations,
     });
   }

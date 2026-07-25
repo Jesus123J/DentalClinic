@@ -302,13 +302,20 @@ Router _buildRouter() {
     final b = await _body(request);
     final result = await pool.execute(
       '''INSERT INTO clinical_records
-         (patient_id, record_date, diagnosis, treatment, observations)
-         VALUES (:patientId, :recordDate, :diagnosis, :treatment, :observations)''',
+         (patient_id, record_date, diagnosis, tooth, procedure_type,
+          chief_complaint, clinical_exam, treatment, prescription, observations)
+         VALUES (:patientId, :recordDate, :diagnosis, :tooth, :procedureType,
+                 :chiefComplaint, :clinicalExam, :treatment, :prescription, :observations)''',
       {
         'patientId': b['patient_id'],
         'recordDate': b['record_date'],
         'diagnosis': b['diagnosis'],
+        'tooth': b['tooth'],
+        'procedureType': b['procedure_type'],
+        'chiefComplaint': b['chief_complaint'],
+        'clinicalExam': b['clinical_exam'],
         'treatment': b['treatment'],
+        'prescription': b['prescription'],
         'observations': b['observations'],
       },
     );
@@ -321,8 +328,55 @@ Router _buildRouter() {
     return _json({'ok': true});
   });
 
+  // ---------- Odontograma ----------
+  router.get('/odontogram', (Request request) async {
+    final result = await pool.execute(
+      'SELECT * FROM odontogram WHERE patient_id = :patientId',
+      {'patientId': request.url.queryParameters['patientId']},
+    );
+    return _json(_rows(result));
+  });
+
+  router.put('/odontogram', (Request request) async {
+    final b = await _body(request);
+    final status = b['status']?.toString() ?? 'sano';
+    if (status == 'sano') {
+      await pool.execute(
+        'DELETE FROM odontogram WHERE patient_id = :patientId AND tooth = :tooth',
+        {'patientId': b['patient_id'], 'tooth': b['tooth']},
+      );
+    } else {
+      await pool.execute(
+        '''INSERT INTO odontogram (patient_id, tooth, status, note)
+           VALUES (:patientId, :tooth, :status, :note)
+           ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note)''',
+        {
+          'patientId': b['patient_id'],
+          'tooth': b['tooth'],
+          'status': status,
+          'note': b['note'],
+        },
+      );
+    }
+    return _json({'ok': true});
+  });
+
   // ---------- Citas ----------
   router.get('/appointments', (Request request) async {
+    final from = request.url.queryParameters['from'];
+    final to = request.url.queryParameters['to'];
+    // Por dia (?date=) o por rango (?from=&to=) para el calendario.
+    if (from != null && to != null) {
+      final result = await pool.execute(
+        '''SELECT a.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+           FROM appointments a
+           JOIN patients p ON p.id = a.patient_id
+           WHERE DATE(a.date_time) BETWEEN :fromDay AND :toDay
+           ORDER BY a.date_time''',
+        {'fromDay': from, 'toDay': to},
+      );
+      return _json(_rows(result));
+    }
     final date = request.url.queryParameters['date'];
     final result = await pool.execute(
       '''SELECT a.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name

@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../features/patients/domain/entities/clinical_record.dart';
 import '../../features/patients/domain/entities/patient.dart';
+import '../../features/patients/domain/entities/tooth_state.dart';
 import '../../features/reports/data/repositories/report_repository.dart';
 
 /// Genera y descarga/imprime los PDF del sistema.
@@ -102,6 +103,7 @@ class PdfExporter {
   static Future<void> patientHistory({
     required Patient patient,
     required List<ClinicalRecord> records,
+    List<ToothState> teeth = const [],
   }) async {
     final doc = pw.Document();
     doc.addPage(
@@ -134,6 +136,25 @@ class PdfExporter {
               1: const pw.FlexColumnWidth(),
             },
           ),
+          if (teeth.isNotEmpty) ...[
+            pw.SizedBox(height: 16),
+            pw.Text('Odontograma — piezas con hallazgos (${teeth.length})',
+                style: pw.TextStyle(
+                    fontSize: 12, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headers: ['Pieza (FDI)', 'Estado', 'Nota'],
+              data: [
+                for (final t in teeth) [t.tooth, t.status.label, t.note ?? '-'],
+              ],
+              headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: _gold),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              oddRowDecoration:
+                  const pw.BoxDecoration(color: PdfColors.grey100),
+            ),
+          ],
           pw.SizedBox(height: 16),
           pw.Text('Registros clinicos (${records.length})',
               style: pw.TextStyle(
@@ -143,25 +164,54 @@ class PdfExporter {
             pw.Text('Sin registros.',
                 style: const pw.TextStyle(fontSize: 10))
           else
-            pw.TableHelper.fromTextArray(
-              headers: ['Fecha', 'Diagnostico', 'Tratamiento', 'Observaciones'],
-              data: [
-                for (final r in records)
-                  [
-                    _date.format(r.recordDate),
-                    r.diagnosis,
-                    r.treatment ?? '-',
-                    r.observations ?? '-',
+            for (final r in records) ...[
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      '${_date.format(r.recordDate)}'
+                      '${r.tooth == null || r.tooth!.isEmpty ? '' : ' — Pieza ${r.tooth}'}'
+                      '${r.procedureType == null ? '' : ' — ${r.procedureType}'}',
+                      style: pw.TextStyle(
+                          fontSize: 10, fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.SizedBox(height: 4),
+                    for (final line in [
+                      ['Motivo de consulta', r.chiefComplaint],
+                      ['Diagnostico', r.diagnosis],
+                      ['Examen clinico', r.clinicalExam],
+                      ['Tratamiento', r.treatment],
+                      ['Receta / indicaciones', r.prescription],
+                      ['Observaciones', r.observations],
+                    ])
+                      if (line[1] != null && line[1]!.isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(bottom: 2),
+                          child: pw.RichText(
+                            text: pw.TextSpan(
+                              style: const pw.TextStyle(fontSize: 9),
+                              children: [
+                                pw.TextSpan(
+                                    text: '${line[0]}: ',
+                                    style: pw.TextStyle(
+                                        fontWeight: pw.FontWeight.bold)),
+                                pw.TextSpan(text: line[1]),
+                              ],
+                            ),
+                          ),
+                        ),
                   ],
-              ],
-              headerStyle: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.teal700),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              oddRowDecoration:
-                  const pw.BoxDecoration(color: PdfColors.grey100),
-            ),
+                ),
+              ),
+              pw.SizedBox(height: 6),
+            ],
         ],
       ),
     );

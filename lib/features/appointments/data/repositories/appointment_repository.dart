@@ -22,6 +22,15 @@ class AppointmentRepository {
     return data.map((e) => _fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// Citas dentro de un rango (para marcar los dias del calendario).
+  Future<List<Appointment>> getByRange(DateTime from, DateTime to) async {
+    final data = await _api.get('/appointments', {
+      'from': from.toIso8601String().substring(0, 10),
+      'to': to.toIso8601String().substring(0, 10),
+    }) as List;
+    return data.map((e) => _fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<void> create(Appointment appointment) async {
     await _api.post('/appointments', {
       'patient_id': appointment.patientId,

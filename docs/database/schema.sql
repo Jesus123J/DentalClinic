@@ -31,7 +31,12 @@ CREATE TABLE IF NOT EXISTS clinical_records (
   patient_id INT NOT NULL,
   record_date DATE NOT NULL,
   diagnosis VARCHAR(300) NOT NULL,
+  tooth VARCHAR(50),               -- pieza(s) dental(es), notacion FDI (ej. 1.6, 2.4)
+  procedure_type VARCHAR(40),      -- consulta, restauracion, endodoncia, extraccion...
+  chief_complaint VARCHAR(300),    -- motivo de consulta
+  clinical_exam TEXT,              -- examen clinico / hallazgos
   treatment VARCHAR(300),
+  prescription TEXT,               -- receta / indicaciones
   observations TEXT,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_clinical_records_patient FOREIGN KEY (patient_id)
@@ -59,6 +64,19 @@ INSERT IGNORE INTO users (username, password_hash, salt, full_name, role) VALUES
  '9d2e6a1c4f8b3705', 'Rosa Mendoza', 'recepcion'),
 ('doctor', 'aebbf179945111d3cf6cd4eb119169f06faebe9dc2b9d0fc21c668b0d94d20a8',
  '2b7c9e4a6d1f8350', 'Dr. Juan Perez', 'odontologo');
+
+-- Odontograma: estado de cada pieza dental (notacion FDI) por paciente
+CREATE TABLE IF NOT EXISTS odontogram (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT NOT NULL,
+  tooth VARCHAR(2) NOT NULL,       -- FDI: 11-18, 21-28, 31-38, 41-48
+  status VARCHAR(30) NOT NULL,     -- caries, obturado, endodoncia, corona...
+  note VARCHAR(200),
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_patient_tooth (patient_id, tooth),
+  CONSTRAINT fk_odontogram_patient FOREIGN KEY (patient_id)
+    REFERENCES patients(id) ON DELETE CASCADE
+);
 
 -- Tokens de sesion (usados por la API PHP; la API Dart los guarda en memoria)
 CREATE TABLE IF NOT EXISTS sessions (

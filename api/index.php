@@ -202,11 +202,16 @@ if ($path === '/clinical-records' && $method === 'GET') {
 if ($path === '/clinical-records' && $method === 'POST') {
     $b = body();
     db()->prepare(
-        'INSERT INTO clinical_records (patient_id, record_date, diagnosis, treatment, observations)
-         VALUES (?, ?, ?, ?, ?)')
+        'INSERT INTO clinical_records
+         (patient_id, record_date, diagnosis, tooth, procedure_type,
+          chief_complaint, clinical_exam, treatment, prescription, observations)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
         ->execute([
             $b['patient_id'] ?? 0, $b['record_date'] ?? null,
-            $b['diagnosis'] ?? '', $b['treatment'] ?? null, $b['observations'] ?? null,
+            $b['diagnosis'] ?? '', $b['tooth'] ?? null,
+            $b['procedure_type'] ?? null, $b['chief_complaint'] ?? null,
+            $b['clinical_exam'] ?? null, $b['treatment'] ?? null,
+            $b['prescription'] ?? null, $b['observations'] ?? null,
         ]);
     respond(['id' => (int)db()->lastInsertId()], 201);
 }
@@ -216,13 +221,49 @@ if (preg_match('#^/clinical-records/(\d+)$#', $path, $m) && $method === 'DELETE'
     respond(['ok' => true]);
 }
 
+// ---------- Odontograma ----------
+if ($path === '/odontogram' && $method === 'GET') {
+    $stmt = db()->prepare('SELECT * FROM odontogram WHERE patient_id = ?');
+    $stmt->execute([(int)($_GET['patientId'] ?? 0)]);
+    respond($stmt->fetchAll());
+}
+
+if ($path === '/odontogram' && $method === 'PUT') {
+    $b = body();
+    $status = $b['status'] ?? 'sano';
+    if ($status === 'sano') {
+        // sano = estado por defecto: se elimina el registro de la pieza
+        db()->prepare('DELETE FROM odontogram WHERE patient_id = ? AND tooth = ?')
+            ->execute([$b['patient_id'] ?? 0, $b['tooth'] ?? '']);
+    } else {
+        db()->prepare(
+            'INSERT INTO odontogram (patient_id, tooth, status, note)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note)')
+            ->execute([
+                $b['patient_id'] ?? 0, $b['tooth'] ?? '',
+                $status, $b['note'] ?? null,
+            ]);
+    }
+    respond(['ok' => true]);
+}
+
 // ---------- Citas ----------
 if ($path === '/appointments' && $method === 'GET') {
-    $stmt = db()->prepare(
-        "SELECT a.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
-         FROM appointments a JOIN patients p ON p.id = a.patient_id
-         WHERE DATE(a.date_time) = ? ORDER BY a.date_time");
-    $stmt->execute([$_GET['date'] ?? date('Y-m-d')]);
+    // Por dia (?date=) o por rango (?from=&to=) para el calendario.
+    if (isset($_GET['from'], $_GET['to'])) {
+        $stmt = db()->prepare(
+            "SELECT a.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+             FROM appointments a JOIN patients p ON p.id = a.patient_id
+             WHERE DATE(a.date_time) BETWEEN ? AND ? ORDER BY a.date_time");
+        $stmt->execute([$_GET['from'], $_GET['to']]);
+    } else {
+        $stmt = db()->prepare(
+            "SELECT a.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+             FROM appointments a JOIN patients p ON p.id = a.patient_id
+             WHERE DATE(a.date_time) = ? ORDER BY a.date_time");
+        $stmt->execute([$_GET['date'] ?? date('Y-m-d')]);
+    }
     respond($stmt->fetchAll());
 }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:table_calendar/table_calendar.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../../patients/data/repositories/patient_repository_impl.dart';
 import '../../../patients/domain/entities/patient.dart';
 import '../../data/repositories/appointment_repository.dart';
@@ -15,18 +17,42 @@ class AppointmentsPage extends StatefulWidget {
 
 class _AppointmentsPageState extends State<AppointmentsPage> {
   final _repo = AppointmentRepository();
+
+  DateTime _focusedMonth = DateTime.now();
   DateTime _selectedDate = DateTime.now();
-  List<Appointment> _appointments = [];
+
+  /// Citas del mes visible agrupadas por dia (para los marcadores).
+  Map<DateTime, List<Appointment>> _monthEvents = {};
+  List<Appointment> _dayAppointments = [];
   bool _loading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadMonth();
+    _loadDay();
   }
 
-  Future<void> _load() async {
+  DateTime _dayKey(DateTime d) => DateTime.utc(d.year, d.month, d.day);
+
+  Future<void> _loadMonth() async {
+    try {
+      final first = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
+      final last = DateTime(_focusedMonth.year, _focusedMonth.month + 1, 0);
+      final appointments = await _repo.getByRange(first, last);
+      if (!mounted) return;
+      final map = <DateTime, List<Appointment>>{};
+      for (final a in appointments) {
+        map.putIfAbsent(_dayKey(a.dateTime), () => []).add(a);
+      }
+      setState(() => _monthEvents = map);
+    } catch (_) {
+      // los marcadores son informativos; el error visible lo da _loadDay
+    }
+  }
+
+  Future<void> _loadDay() async {
     setState(() {
       _loading = true;
       _error = null;
@@ -35,7 +61,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
       final appointments = await _repo.getByDate(_selectedDate);
       if (!mounted) return;
       setState(() {
-        _appointments = appointments;
+        _dayAppointments = appointments;
         _loading = false;
       });
     } catch (e) {
@@ -47,31 +73,23 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
     }
   }
 
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (picked != null) {
-      setState(() => _selectedDate = picked);
-      _load();
-    }
-  }
-
   Future<void> _create() async {
     final appointment =
         await _AppointmentFormDialog.show(context, _selectedDate);
     if (appointment == null) return;
     await _repo.create(appointment);
-    setState(() => _selectedDate = appointment.dateTime);
-    _load();
+    setState(() {
+      _selectedDate = appointment.dateTime;
+      _focusedMonth = appointment.dateTime;
+    });
+    _loadMonth();
+    _loadDay();
   }
 
   Future<void> _changeStatus(Appointment a, AppointmentStatus status) async {
     await _repo.updateStatus(a.id!, status);
-    _load();
+    _loadMonth();
+    _loadDay();
   }
 
   Future<void> _delete(Appointment a) async {
@@ -94,7 +112,8 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
     );
     if (confirm != true) return;
     await _repo.delete(a.id!);
-    _load();
+    _loadMonth();
+    _loadDay();
   }
 
   Color _statusColor(AppointmentStatus status) => switch (status) {
@@ -116,12 +135,6 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text('Citas', style: Theme.of(context).textTheme.headlineMedium),
-              OutlinedButton.icon(
-                onPressed: _pickDate,
-                icon: const Icon(Icons.event),
-                label: Text(
-                    DateFormat('EEEE dd/MM/yyyy', 'es').format(_selectedDate)),
-              ),
               FilledButton.icon(
                 onPressed: _create,
                 icon: const Icon(Icons.add),
@@ -130,9 +143,102 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
             ],
           ),
           const SizedBox(height: 16),
-          Expanded(child: _buildBody()),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 950;
+                final calendar = _buildCalendar();
+                final list = _buildDayList();
+                if (wide) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 420, child: calendar),
+                      const SizedBox(width: 20),
+                      Expanded(child: list),
+                    ],
+                  );
+                }
+                return ListView(
+                  children: [
+                    calendar,
+                    const SizedBox(height: 16),
+                    SizedBox(height: 420, child: list),
+                  ],
+                );
+              },
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCalendar() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: TableCalendar<Appointment>(
+          locale: 'es',
+          firstDay: DateTime(2020),
+          lastDay: DateTime(2100),
+          focusedDay: _focusedMonth,
+          selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
+          eventLoader: (day) => _monthEvents[_dayKey(day)] ?? const [],
+          startingDayOfWeek: StartingDayOfWeek.monday,
+          availableCalendarFormats: const {CalendarFormat.month: 'Mes'},
+          headerStyle: const HeaderStyle(
+            titleCentered: true,
+            formatButtonVisible: false,
+          ),
+          calendarStyle: CalendarStyle(
+            todayDecoration: BoxDecoration(
+              color: AppTheme.gold.withValues(alpha: 0.35),
+              shape: BoxShape.circle,
+            ),
+            selectedDecoration: const BoxDecoration(
+              color: AppTheme.gold,
+              shape: BoxShape.circle,
+            ),
+            selectedTextStyle: const TextStyle(
+                color: Colors.black87, fontWeight: FontWeight.bold),
+            markerDecoration: const BoxDecoration(
+              color: AppTheme.charcoal,
+              shape: BoxShape.circle,
+            ),
+            markersMaxCount: 4,
+          ),
+          onDaySelected: (selected, focused) {
+            setState(() {
+              _selectedDate = selected;
+              _focusedMonth = focused;
+            });
+            _loadDay();
+          },
+          onPageChanged: (focused) {
+            _focusedMonth = focused;
+            _loadMonth();
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDayList() {
+    final title = DateFormat("EEEE dd 'de' MMMM", 'es').format(_selectedDate);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title[0].toUpperCase() + title.substring(1),
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Expanded(child: _buildBody()),
+      ],
     );
   }
 
@@ -145,19 +251,19 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
           children: [
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _load, child: const Text('Reintentar')),
+            FilledButton(onPressed: _loadDay, child: const Text('Reintentar')),
           ],
         ),
       );
     }
-    if (_appointments.isEmpty) {
+    if (_dayAppointments.isEmpty) {
       return const Center(child: Text('No hay citas para esta fecha.'));
     }
     return ListView.separated(
-      itemCount: _appointments.length,
+      itemCount: _dayAppointments.length,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final a = _appointments[index];
+        final a = _dayAppointments[index];
         return Card(
           child: ListTile(
             leading: CircleAvatar(
