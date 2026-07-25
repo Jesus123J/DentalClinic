@@ -63,6 +63,41 @@ class _UsersPageState extends State<UsersPage> {
     }
   }
 
+  Future<void> _delete(AppUser user) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar cuenta'),
+        content: Text(
+            'Se eliminara definitivamente la cuenta @${user.username} '
+            '(${user.fullName}). Esta accion no se puede deshacer.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await _repo.delete(user.id);
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -84,8 +119,9 @@ class _UsersPageState extends State<UsersPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Las cuentas nuevas son de recepcion u odontologo; '
-            'las cuentas deshabilitadas no pueden iniciar sesion.',
+            'Las cuentas nuevas son de recepcion u odontologo. Puedes '
+            'deshabilitar una cuenta (no podra iniciar sesion) o eliminarla '
+            'definitivamente si ya no se usa.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
@@ -134,6 +170,13 @@ class _UsersPageState extends State<UsersPage> {
                       Switch(
                         value: u.active,
                         onChanged: (v) => _toggleActive(u, v),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: 'Eliminar cuenta',
+                        icon: Icon(Icons.delete_outline,
+                            color: Theme.of(context).colorScheme.error),
+                        onPressed: () => _delete(u),
                       ),
                     ],
                   ),

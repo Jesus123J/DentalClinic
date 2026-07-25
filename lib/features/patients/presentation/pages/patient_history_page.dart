@@ -246,6 +246,8 @@ class _RecordFormDialogState extends State<_RecordFormDialog> {
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 16,
             children: [
               Align(
                 alignment: Alignment.centerLeft,
@@ -263,11 +265,13 @@ class _RecordFormDialogState extends State<_RecordFormDialog> {
               ),
               TextFormField(
                 controller: _treatment,
-                decoration: const InputDecoration(labelText: 'Tratamiento'),
+                decoration: const InputDecoration(
+                    labelText: 'Tratamiento (opcional)'),
               ),
               TextFormField(
                 controller: _observations,
-                decoration: const InputDecoration(labelText: 'Observaciones'),
+                decoration: const InputDecoration(
+                    labelText: 'Observaciones (opcional)'),
                 maxLines: 3,
               ),
             ],

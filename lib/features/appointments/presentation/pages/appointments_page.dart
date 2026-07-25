@@ -293,10 +293,14 @@ class _AppointmentFormDialogState extends State<_AppointmentFormDialog> {
     return AlertDialog(
       title: const Text('Nueva cita'),
       content: SizedBox(
-        width: 480,
+        width: 500,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 16,
           children: [
+            Text('Solo el paciente es obligatorio.',
+                style: Theme.of(context).textTheme.bodySmall),
             DropdownButtonFormField<Patient>(
               initialValue: _selectedPatient,
               decoration: const InputDecoration(labelText: 'Paciente *'),
@@ -306,7 +310,6 @@ class _AppointmentFormDialogState extends State<_AppointmentFormDialog> {
               ],
               onChanged: (p) => setState(() => _selectedPatient = p),
             ),
-            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -316,7 +319,7 @@ class _AppointmentFormDialogState extends State<_AppointmentFormDialog> {
                     label: Text(DateFormat('dd/MM/yyyy').format(_date)),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 16),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _pickTime,
@@ -328,8 +331,8 @@ class _AppointmentFormDialogState extends State<_AppointmentFormDialog> {
             ),
             TextFormField(
               controller: _reason,
-              decoration:
-                  const InputDecoration(labelText: 'Motivo de la cita'),
+              decoration: const InputDecoration(
+                  labelText: 'Motivo de la cita (opcional)'),
             ),
           ],
         ),

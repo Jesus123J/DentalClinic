@@ -36,4 +36,8 @@ class UserRepository {
   Future<void> setActive(int id, bool active) async {
     await _api.patch('/users/$id/active', {'active': active});
   }
+
+  Future<void> delete(int id) async {
+    await _api.delete('/users/$id');
+  }
 }

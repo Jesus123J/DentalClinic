@@ -186,6 +186,20 @@ Router _buildRouter() {
     return _json({'id': result.lastInsertID.toInt()}, status: 201);
   });
 
+  router.delete('/users/<id>', (Request request, String id) async {
+    final denied = requireAdmin(request);
+    if (denied != null) return denied;
+    final target = await pool
+        .execute('SELECT role FROM users WHERE id = :id', {'id': id});
+    if (target.rows.isEmpty) return _json({'error': 'no existe'}, status: 404);
+    if (target.rows.first.assoc()['role'] == 'admin') {
+      return _json({'error': 'no se puede eliminar al administrador'},
+          status: 403);
+    }
+    await pool.execute('DELETE FROM users WHERE id = :id', {'id': id});
+    return _json({'ok': true});
+  });
+
   router.patch('/users/<id>/active', (Request request, String id) async {
     final denied = requireAdmin(request);
     if (denied != null) return denied;

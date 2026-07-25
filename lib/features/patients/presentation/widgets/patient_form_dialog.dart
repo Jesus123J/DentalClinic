@@ -89,13 +89,18 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
     return AlertDialog(
       title: Text(isEdit ? 'Editar paciente' : 'Nuevo paciente'),
       content: SizedBox(
-        width: 520,
+        width: 540,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 16,
               children: [
+                Text('Los campos con * son obligatorios; el resto es opcional.',
+                    style: Theme.of(context).textTheme.bodySmall),
                 Row(children: [
                   Expanded(
                     child: TextFormField(
@@ -105,7 +110,7 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
                           v == null || v.trim().isEmpty ? 'Requerido' : null,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: TextFormField(
                       controller: _lastName,
@@ -120,39 +125,43 @@ class _PatientFormDialogState extends State<PatientFormDialog> {
                   Expanded(
                     child: TextFormField(
                       controller: _documentId,
-                      decoration: const InputDecoration(labelText: 'DNI'),
+                      decoration: const InputDecoration(
+                          labelText: 'DNI (opcional)'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: TextFormField(
                       controller: _phone,
-                      decoration: const InputDecoration(labelText: 'Telefono'),
+                      decoration: const InputDecoration(
+                          labelText: 'Telefono (opcional)'),
                     ),
                   ),
                 ]),
                 TextFormField(
                   controller: _email,
-                  decoration: const InputDecoration(labelText: 'Correo'),
+                  decoration:
+                      const InputDecoration(labelText: 'Correo (opcional)'),
                 ),
-                const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: OutlinedButton.icon(
                     onPressed: _pickBirthDate,
                     icon: const Icon(Icons.cake_outlined),
                     label: Text(_birthDate == null
-                        ? 'Fecha de nacimiento'
+                        ? 'Fecha de nacimiento (opcional)'
                         : DateFormat('dd/MM/yyyy').format(_birthDate!)),
                   ),
                 ),
                 TextFormField(
                   controller: _allergies,
-                  decoration: const InputDecoration(labelText: 'Alergias'),
+                  decoration:
+                      const InputDecoration(labelText: 'Alergias (opcional)'),
                 ),
                 TextFormField(
                   controller: _notes,
-                  decoration: const InputDecoration(labelText: 'Notas'),
+                  decoration:
+                      const InputDecoration(labelText: 'Notas (opcional)'),
                   maxLines: 2,
                 ),
               ],

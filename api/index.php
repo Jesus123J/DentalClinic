@@ -306,6 +306,20 @@ if ($path === '/users' && $method === 'POST') {
     respond(['id' => (int)db()->lastInsertId()], 201);
 }
 
+if (preg_match('#^/users/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    requireAdmin();
+    $id = (int)$m[1];
+    $stmt = db()->prepare('SELECT role FROM users WHERE id = ?');
+    $stmt->execute([$id]);
+    $target = $stmt->fetch();
+    if ($target === false) respond(['error' => 'no existe'], 404);
+    if ($target['role'] === 'admin') {
+        respond(['error' => 'no se puede eliminar al administrador'], 403);
+    }
+    db()->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+    respond(['ok' => true]);
+}
+
 if (preg_match('#^/users/(\d+)/active$#', $path, $m) && $method === 'PATCH') {
     requireAdmin();
     $id = (int)$m[1];
