@@ -1,0 +1,8 @@
+# Evita que el navegador se quede con versiones viejas de la app.
+# html/js/json se revalidan en cada visita (304 si no cambiaron);
+# imagenes, fuentes y wasm si se cachean normalmente.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|js|json)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
