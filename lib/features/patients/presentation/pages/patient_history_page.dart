@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/pdf/pdf_exporter.dart';
@@ -296,8 +299,112 @@ class _AttachmentsTabState extends State<_AttachmentsTab> {
     }
   }
 
-  Future<void> _open(Attachment file) async {
-    await launchUrl(Uri.parse(_repo.viewUrl(file.id)));
+  /// Vista previa dentro de la app: imagenes ampliables y PDFs con visor.
+  Future<void> _preview(Attachment file) async {
+    showDialog(
+      context: context,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+      barrierDismissible: false,
+    );
+    Uint8List bytes;
+    try {
+      bytes = Uint8List.fromList(await _repo.download(file.id));
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo abrir: $e')));
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(); // cierra el loading
+
+    if (file.isImage) {
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900, maxHeight: 700),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(file.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: InteractiveViewer(
+                    maxScale: 6,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Image.memory(bytes, fit: BoxFit.contain),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else if (file.isPdf) {
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900, maxHeight: 750),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(file.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: PdfPreview(
+                    build: (_) async => bytes,
+                    canChangeOrientation: false,
+                    canChangePageFormat: false,
+                    pdfFileName: file.name,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else {
+      await _openInBrowser(file);
+    }
+  }
+
+  Future<void> _openInBrowser(Attachment file) async {
+    await launchUrl(
+      Uri.parse(_repo.viewUrl(file.id)),
+      webOnlyWindowName: '_blank',
+    );
   }
 
   Future<void> _delete(Attachment file) async {
@@ -389,14 +496,19 @@ class _AttachmentsTabState extends State<_AttachmentsTab> {
             title: Text(f.name, overflow: TextOverflow.ellipsis),
             subtitle: Text(
                 '${f.sizeLabel} · ${DateFormat('dd/MM/yyyy HH:mm').format(f.uploadedAt)}'),
-            onTap: () => _open(f),
+            onTap: () => _preview(f),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  tooltip: 'Ver / descargar',
+                  tooltip: 'Vista previa',
+                  icon: const Icon(Icons.visibility_outlined),
+                  onPressed: () => _preview(f),
+                ),
+                IconButton(
+                  tooltip: 'Abrir en el navegador',
                   icon: const Icon(Icons.open_in_new),
-                  onPressed: () => _open(f),
+                  onPressed: () => _openInBrowser(f),
                 ),
                 IconButton(
                   tooltip: 'Eliminar',

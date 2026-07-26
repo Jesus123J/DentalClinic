@@ -51,6 +51,15 @@ class ApiClient {
   Future<void> delete(String path) async =>
       _decode(await http.delete(_uri(path), headers: _headers));
 
+  /// Descarga el contenido binario de un recurso (imagenes, PDFs).
+  Future<List<int>> getBytes(String path, [Map<String, String>? query]) async {
+    final response = await http.get(_uri(path, query), headers: _headers);
+    if (response.statusCode >= 400) {
+      throw Exception('HTTP ${response.statusCode}');
+    }
+    return response.bodyBytes;
+  }
+
   /// Sube un archivo como multipart/form-data.
   Future<dynamic> uploadFile(
     String path, {

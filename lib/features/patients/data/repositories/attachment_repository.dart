@@ -41,6 +41,11 @@ class AttachmentRepository {
     await _api.delete('/attachments/$id');
   }
 
+  /// Descarga el contenido del archivo para verlo dentro de la app.
+  Future<List<int>> download(int id) async {
+    return _api.getBytes('/attachments/$id/download');
+  }
+
   /// URL para abrir/descargar el archivo en el navegador (incluye el token).
   String viewUrl(int id) {
     // En produccion baseUrl es relativa (/api): se completa con el origen.

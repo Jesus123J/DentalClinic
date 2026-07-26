@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+﻿import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -179,8 +179,8 @@ class PdfExporter {
         build: (context) => [
           _header(
             'Reporte de atenciones',
-            'Del ${_date.format(from)} al ${_date.format(to)} — '
-                '${rows.length} atenciones — generado el ${_dateTime.format(DateTime.now())}',
+            'Del ${_date.format(from)} al ${_date.format(to)} - '
+                '${rows.length} atenciones - generado el ${_dateTime.format(DateTime.now())}',
           ),
           pw.SizedBox(height: 8),
           pw.TableHelper.fromTextArray(
@@ -221,7 +221,7 @@ class PdfExporter {
         pageFormat: PdfPageFormat.a4,
         build: (context) => [
           _header(
-            'Historia clinica — ${patient.fullName}',
+            'Historia clinica - ${patient.fullName}',
             'Generado el ${_dateTime.format(DateTime.now())}',
           ),
           pw.SizedBox(height: 8),
@@ -293,8 +293,8 @@ class PdfExporter {
                   children: [
                     pw.Text(
                       '${_date.format(r.recordDate)}'
-                      '${r.tooth == null || r.tooth!.isEmpty ? '' : ' — Pieza ${r.tooth}'}'
-                      '${r.procedureType == null ? '' : ' — ${r.procedureType}'}',
+                      '${r.tooth == null || r.tooth!.isEmpty ? '' : ' - Pieza ${r.tooth}'}'
+                      '${r.procedureType == null ? '' : ' - ${r.procedureType}'}',
                       style: pw.TextStyle(
                           fontSize: 10, fontWeight: pw.FontWeight.bold),
                     ),
