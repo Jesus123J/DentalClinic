@@ -50,4 +50,23 @@ class ApiClient {
 
   Future<void> delete(String path) async =>
       _decode(await http.delete(_uri(path), headers: _headers));
+
+  /// Sube un archivo como multipart/form-data.
+  Future<dynamic> uploadFile(
+    String path, {
+    required Map<String, String> fields,
+    required List<int> bytes,
+    required String filename,
+    String fileField = 'file',
+  }) async {
+    final request = http.MultipartRequest('POST', _uri(path));
+    if (Session.token != null) {
+      request.headers['authorization'] = 'Bearer ${Session.token}';
+    }
+    request.fields.addAll(fields);
+    request.files
+        .add(http.MultipartFile.fromBytes(fileField, bytes, filename: filename));
+    final streamed = await request.send();
+    return _decode(await http.Response.fromStream(streamed));
+  }
 }

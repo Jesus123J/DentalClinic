@@ -1,9 +1,13 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/pdf/pdf_exporter.dart';
+import '../../data/repositories/attachment_repository.dart';
 import '../../data/repositories/clinical_record_repository.dart';
 import '../../data/repositories/odontogram_repository.dart';
+import '../../domain/entities/attachment.dart';
 import '../../domain/entities/clinical_record.dart';
 import '../../domain/entities/patient.dart';
 import '../widgets/odontogram_view.dart';
@@ -84,7 +88,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   Widget build(BuildContext context) {
     final p = widget.patient;
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: Text('Historia clinica — ${p.fullName}'),
@@ -104,6 +108,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
               Tab(
                   icon: Icon(Icons.receipt_long_outlined),
                   text: 'Registros clinicos'),
+              Tab(icon: Icon(Icons.attach_file), text: 'Archivos'),
             ],
           ),
         ),
@@ -144,6 +149,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                   children: [
                     OdontogramView(patientId: p.id!),
                     _buildRecords(),
+                    _AttachmentsTab(patientId: p.id!),
                   ],
                 ),
               ),
@@ -211,6 +217,197 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
           Text(value),
         ],
       ),
+    );
+  }
+}
+
+/// Pestana de archivos adjuntos: radiografias, fotos y PDFs del paciente.
+class _AttachmentsTab extends StatefulWidget {
+  const _AttachmentsTab({required this.patientId});
+
+  final int patientId;
+
+  @override
+  State<_AttachmentsTab> createState() => _AttachmentsTabState();
+}
+
+class _AttachmentsTabState extends State<_AttachmentsTab> {
+  final _repo = AttachmentRepository();
+  List<Attachment> _files = [];
+  bool _loading = true;
+  bool _uploading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final files = await _repo.getByPatient(widget.patientId);
+      if (!mounted) return;
+      setState(() {
+        _files = files;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Error: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _upload() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'pdf'],
+      withData: true,
+    );
+    final file = result?.files.firstOrNull;
+    if (file == null || file.bytes == null) return;
+    if (file.size > 15 * 1024 * 1024) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El archivo supera los 15 MB')));
+      return;
+    }
+    setState(() => _uploading = true);
+    try {
+      await _repo.upload(
+        patientId: widget.patientId,
+        filename: file.name,
+        bytes: file.bytes!,
+      );
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo subir: $e')));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _open(Attachment file) async {
+    await launchUrl(Uri.parse(_repo.viewUrl(file.id)));
+  }
+
+  Future<void> _delete(Attachment file) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar archivo'),
+        content: Text('Se eliminara "${file.name}" definitivamente.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await _repo.delete(file.id);
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Radiografias, fotos o historias anteriores en PDF (max. 15 MB).',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: _uploading ? null : _upload,
+              icon: _uploading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.upload_file),
+              label: Text(_uploading ? 'Subiendo…' : 'Subir archivo'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(child: _buildList()),
+      ],
+    );
+  }
+
+  Widget _buildList() {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: _load, child: const Text('Reintentar')),
+          ],
+        ),
+      );
+    }
+    if (_files.isEmpty) {
+      return const Center(
+          child: Text('Sin archivos adjuntos. Usa "Subir archivo".'));
+    }
+    return ListView.separated(
+      itemCount: _files.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final f = _files[index];
+        return Card(
+          child: ListTile(
+            leading: CircleAvatar(
+              child: Icon(f.isPdf
+                  ? Icons.picture_as_pdf_outlined
+                  : f.isImage
+                      ? Icons.image_outlined
+                      : Icons.insert_drive_file_outlined),
+            ),
+            title: Text(f.name, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+                '${f.sizeLabel} · ${DateFormat('dd/MM/yyyy HH:mm').format(f.uploadedAt)}'),
+            onTap: () => _open(f),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Ver / descargar',
+                  icon: const Icon(Icons.open_in_new),
+                  onPressed: () => _open(f),
+                ),
+                IconButton(
+                  tooltip: 'Eliminar',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => _delete(f),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

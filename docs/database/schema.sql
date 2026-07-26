@@ -78,6 +78,19 @@ CREATE TABLE IF NOT EXISTS odontogram (
     REFERENCES patients(id) ON DELETE CASCADE
 );
 
+-- Archivos adjuntos de la historia clinica (radiografias, fotos, PDFs)
+CREATE TABLE IF NOT EXISTS attachments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT NOT NULL,
+  original_name VARCHAR(200) NOT NULL,
+  stored_name VARCHAR(200) NOT NULL,   -- nombre en api/uploads/
+  mime VARCHAR(100) NOT NULL,
+  size INT NOT NULL,
+  uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_attachments_patient FOREIGN KEY (patient_id)
+    REFERENCES patients(id) ON DELETE CASCADE
+);
+
 -- Tokens de sesion (usados por la API PHP; la API Dart los guarda en memoria)
 CREATE TABLE IF NOT EXISTS sessions (
   token VARCHAR(64) PRIMARY KEY,

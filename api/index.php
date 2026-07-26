@@ -58,7 +58,9 @@ function db(): PDO {
 
 function bearerToken(): string {
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    return strpos($header, 'Bearer ') === 0 ? substr($header, 7) : '';
+    if (strpos($header, 'Bearer ') === 0) return substr($header, 7);
+    // Fallback ?token= para enlaces de descarga abiertos en el navegador.
+    return $_GET['token'] ?? '';
 }
 
 /** Usuario de la sesion actual o null. */
@@ -218,6 +220,74 @@ if ($path === '/clinical-records' && $method === 'POST') {
 
 if (preg_match('#^/clinical-records/(\d+)$#', $path, $m) && $method === 'DELETE') {
     db()->prepare('DELETE FROM clinical_records WHERE id = ?')->execute([(int)$m[1]]);
+    respond(['ok' => true]);
+}
+
+// ---------- Archivos adjuntos de la historia clinica ----------
+if ($path === '/attachments' && $method === 'GET') {
+    $stmt = db()->prepare(
+        'SELECT id, patient_id, original_name, mime, size, uploaded_at
+         FROM attachments WHERE patient_id = ? ORDER BY uploaded_at DESC');
+    $stmt->execute([(int)($_GET['patientId'] ?? 0)]);
+    respond($stmt->fetchAll());
+}
+
+if ($path === '/attachments' && $method === 'POST') {
+    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        respond(['error' => 'archivo no recibido'], 400);
+    }
+    $orig = $_FILES['file']['name'];
+    $ext = strtolower(pathinfo($orig, PATHINFO_EXTENSION));
+    $allowed = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'pdf'];
+    if (!in_array($ext, $allowed, true)) {
+        respond(['error' => 'tipo no permitido: use imagenes o PDF'], 400);
+    }
+    if ($_FILES['file']['size'] > 15 * 1024 * 1024) {
+        respond(['error' => 'el archivo supera los 15 MB'], 400);
+    }
+    $dir = __DIR__ . '/uploads';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+        // los archivos solo se sirven a traves de la API (con token)
+        file_put_contents("$dir/.htaccess", "Require all denied\n");
+    }
+    $stored = uniqid('att_', true) . '.' . $ext;
+    if (!move_uploaded_file($_FILES['file']['tmp_name'], "$dir/$stored")) {
+        respond(['error' => 'no se pudo guardar el archivo'], 500);
+    }
+    db()->prepare(
+        'INSERT INTO attachments (patient_id, original_name, stored_name, mime, size)
+         VALUES (?, ?, ?, ?, ?)')
+        ->execute([
+            (int)($_POST['patient_id'] ?? 0), $orig, $stored,
+            $_FILES['file']['type'] ?: 'application/octet-stream',
+            $_FILES['file']['size'],
+        ]);
+    respond(['id' => (int)db()->lastInsertId()], 201);
+}
+
+if (preg_match('#^/attachments/(\d+)/download$#', $path, $m) && $method === 'GET') {
+    $stmt = db()->prepare('SELECT * FROM attachments WHERE id = ?');
+    $stmt->execute([(int)$m[1]]);
+    $att = $stmt->fetch();
+    if ($att === false) respond(['error' => 'no existe'], 404);
+    $file = __DIR__ . '/uploads/' . $att['stored_name'];
+    if (!is_file($file)) respond(['error' => 'archivo no encontrado'], 404);
+    header('Content-Type: ' . $att['mime']);
+    header('Content-Length: ' . filesize($file));
+    header('Content-Disposition: inline; filename="' . $att['original_name'] . '"');
+    readfile($file);
+    exit;
+}
+
+if (preg_match('#^/attachments/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    $stmt = db()->prepare('SELECT stored_name FROM attachments WHERE id = ?');
+    $stmt->execute([(int)$m[1]]);
+    $att = $stmt->fetch();
+    if ($att !== false) {
+        @unlink(__DIR__ . '/uploads/' . $att['stored_name']);
+        db()->prepare('DELETE FROM attachments WHERE id = ?')->execute([(int)$m[1]]);
+    }
     respond(['ok' => true]);
 }
 
