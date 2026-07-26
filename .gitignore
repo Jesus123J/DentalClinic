@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Archivos subidos por los usuarios (datos de pacientes - nunca al repo)
+api/uploads/*
+!api/uploads/.htaccess
