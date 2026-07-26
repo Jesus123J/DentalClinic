@@ -311,13 +311,15 @@ class _AttachmentsTabState extends State<_AttachmentsTab> {
       bytes = Uint8List.fromList(await _repo.download(file.id));
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context).pop();
+      // rootNavigator: los dialogos viven en el navegador raiz;
+      // sin esto se cerraba la pagina en lugar del dialogo de carga.
+      Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('No se pudo abrir: $e')));
       return;
     }
     if (!mounted) return;
-    Navigator.of(context).pop(); // cierra el loading
+    Navigator.of(context, rootNavigator: true).pop(); // cierra el loading
 
     if (file.isImage) {
       showDialog(
