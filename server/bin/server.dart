@@ -418,6 +418,43 @@ Router _buildRouter() {
     return _json({'ok': true});
   });
 
+  // ---------- Resumen economico y de visitas de un paciente ----------
+  router.get('/patients/<id>/summary', (Request request, String id) async {
+    final totals = await pool.execute(
+      '''SELECT COALESCE(SUM(total),0) AS spent,
+                COALESCE(SUM(total - paid),0) AS due,
+                COUNT(*) AS sales_count
+         FROM sales WHERE patient_id = :id AND status <> 'anulado' ''',
+      {'id': id},
+    );
+    final visits = await pool.execute(
+      '''SELECT COUNT(*) AS attended, MAX(date_time) AS last_visit,
+                MIN(date_time) AS first_visit
+         FROM appointments WHERE patient_id = :id AND status = 'atendida' ''',
+      {'id': id},
+    );
+    final sales = await pool.execute(
+      'SELECT * FROM sales WHERE patient_id = :id ORDER BY created_at DESC',
+      {'id': id},
+    );
+    final appointments = await pool.execute(
+      'SELECT * FROM appointments WHERE patient_id = :id ORDER BY date_time DESC',
+      {'id': id},
+    );
+    final t = totals.rows.first.assoc();
+    final v = visits.rows.first.assoc();
+    return _json({
+      'spent': t['spent'],
+      'due': t['due'],
+      'sales_count': t['sales_count'],
+      'visits': v['attended'],
+      'first_visit': v['first_visit'],
+      'last_visit': v['last_visit'],
+      'sales': _rows(sales),
+      'appointments': _rows(appointments),
+    });
+  });
+
   // ---------- Reportes ----------
   router.get('/reports/appointments', (Request request) async {
     final from = request.url.queryParameters['from'];

@@ -587,6 +587,76 @@ if ($path === '/finance/summary' && $method === 'GET') {
     ]);
 }
 
+// ---------- Resumen economico y de visitas de un paciente ----------
+if (preg_match('#^/patients/(\d+)/summary$#', $path, $m) && $method === 'GET') {
+    $id = (int)$m[1];
+
+    $tot = db()->prepare(
+        "SELECT COALESCE(SUM(total),0) AS spent,
+                COALESCE(SUM(total - paid),0) AS due,
+                COUNT(*) AS sales_count
+         FROM sales WHERE patient_id = ? AND status <> 'anulado'");
+    $tot->execute([$id]);
+    $totals = $tot->fetch();
+
+    $visits = db()->prepare(
+        "SELECT COUNT(*) AS attended,
+                MAX(date_time) AS last_visit,
+                MIN(date_time) AS first_visit
+         FROM appointments WHERE patient_id = ? AND status = 'atendida'");
+    $visits->execute([$id]);
+    $v = $visits->fetch();
+
+    $next = db()->prepare(
+        "SELECT MIN(date_time) AS next_visit FROM appointments
+         WHERE patient_id = ? AND status = 'pendiente' AND date_time >= NOW()");
+    $next->execute([$id]);
+
+    $recs = db()->prepare(
+        'SELECT COUNT(*) AS n FROM clinical_records WHERE patient_id = ?');
+    $recs->execute([$id]);
+
+    // Cobros del paciente con el detalle de servicios
+    $sales = db()->prepare(
+        'SELECT * FROM sales WHERE patient_id = ? ORDER BY created_at DESC');
+    $sales->execute([$id]);
+    $salesRows = $sales->fetchAll();
+    $itemStmt = db()->prepare(
+        'SELECT name, price, qty FROM sale_items WHERE sale_id = ?');
+    foreach ($salesRows as &$s) {
+        $itemStmt->execute([$s['id']]);
+        $s['items'] = $itemStmt->fetchAll();
+    }
+    unset($s);
+
+    // Todas las citas del paciente
+    $appts = db()->prepare(
+        'SELECT * FROM appointments WHERE patient_id = ? ORDER BY date_time DESC');
+    $appts->execute([$id]);
+
+    // Servicios mas realizados a este paciente
+    $top = db()->prepare(
+        "SELECT i.name, SUM(i.qty) AS qty, SUM(i.price * i.qty) AS amount
+         FROM sale_items i JOIN sales s ON s.id = i.sale_id
+         WHERE s.patient_id = ? AND s.status <> 'anulado'
+         GROUP BY i.name ORDER BY amount DESC");
+    $top->execute([$id]);
+
+    respond([
+        'spent' => (float)$totals['spent'],
+        'due' => (float)$totals['due'],
+        'sales_count' => (int)$totals['sales_count'],
+        'visits' => (int)$v['attended'],
+        'first_visit' => $v['first_visit'],
+        'last_visit' => $v['last_visit'],
+        'next_visit' => $next->fetch()['next_visit'],
+        'records_count' => (int)$recs->fetch()['n'],
+        'sales' => $salesRows,
+        'appointments' => $appts->fetchAll(),
+        'top_treatments' => $top->fetchAll(),
+    ]);
+}
+
 // ---------- Reportes ----------
 if ($path === '/reports/appointments' && $method === 'GET') {
     $stmt = db()->prepare(

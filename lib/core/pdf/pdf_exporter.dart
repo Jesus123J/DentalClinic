@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 
 import '../../features/patients/domain/entities/clinical_record.dart';
 import '../../features/patients/domain/entities/patient.dart';
+import '../../features/patients/domain/entities/patient_summary.dart';
 import '../../features/patients/domain/entities/tooth_state.dart';
 import '../../features/reports/data/repositories/report_repository.dart';
 
@@ -214,7 +215,9 @@ class PdfExporter {
     required Patient patient,
     required List<ClinicalRecord> records,
     List<ToothState> teeth = const [],
+    PatientSummary? summary,
   }) async {
+    final money = NumberFormat.currency(locale: 'es_PE', symbol: 'S/ ');
     final doc = pw.Document();
     doc.addPage(
       pw.MultiPage(
@@ -246,6 +249,38 @@ class PdfExporter {
               1: const pw.FlexColumnWidth(),
             },
           ),
+          if (summary != null) ...[
+            pw.SizedBox(height: 16),
+            pw.Text('Resumen del paciente',
+                style: pw.TextStyle(
+                    fontSize: 12, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headers: const [
+                'Total gastado',
+                'Cobros',
+                'Visitas atendidas',
+                'Saldo pendiente',
+                'Ultima visita',
+              ],
+              data: [
+                [
+                  money.format(summary.spent),
+                  '${summary.salesCount}',
+                  '${summary.visits}',
+                  summary.due > 0 ? money.format(summary.due) : 'Al dia',
+                  summary.lastVisit == null
+                      ? '-'
+                      : _date.format(summary.lastVisit!),
+                ],
+              ],
+              headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: _gold),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              cellAlignment: pw.Alignment.center,
+            ),
+          ],
           pw.SizedBox(height: 16),
           pw.Text('Odontograma',
               style: pw.TextStyle(

@@ -1,5 +1,8 @@
 import '../../../../core/api/api_client.dart';
+import '../../../appointments/domain/entities/appointment.dart';
+import '../../../finance/domain/entities/finance_models.dart';
 import '../../domain/entities/patient.dart';
+import '../../domain/entities/patient_summary.dart';
 import '../../domain/repositories/patient_repository.dart';
 
 class PatientRepositoryImpl implements PatientRepository {
@@ -63,5 +66,70 @@ class PatientRepositoryImpl implements PatientRepository {
   @override
   Future<void> delete(int id) async {
     await _api.delete('/patients/$id');
+  }
+
+  static double _num(dynamic v) =>
+      v == null ? 0 : double.tryParse(v.toString()) ?? 0;
+
+  static DateTime? _date(dynamic v) =>
+      v == null ? null : DateTime.tryParse(v.toString());
+
+  /// Resumen economico y de visitas del paciente.
+  Future<PatientSummary> summary(int id) async {
+    final j = await _api.get('/patients/$id/summary') as Map<String, dynamic>;
+
+    final sales = (j['sales'] as List? ?? []).map((e) {
+      final s = e as Map<String, dynamic>;
+      return Sale(
+        id: int.parse(s['id'].toString()),
+        patientId: id,
+        total: _num(s['total']),
+        paid: _num(s['paid']),
+        method: PaymentMethod.fromDb(s['method']),
+        status: s['status'] ?? 'pagado',
+        note: s['note'],
+        createdAt: _date(s['created_at']) ?? DateTime.now(),
+        items: (s['items'] as List? ?? []).map((i) {
+          final it = i as Map<String, dynamic>;
+          return SaleItem(
+            name: it['name'] ?? '',
+            price: _num(it['price']),
+            qty: int.tryParse(it['qty'].toString()) ?? 1,
+          );
+        }).toList(),
+      );
+    }).toList();
+
+    final appointments = (j['appointments'] as List? ?? []).map((e) {
+      final a = e as Map<String, dynamic>;
+      return Appointment(
+        id: int.parse(a['id'].toString()),
+        patientId: id,
+        dateTime: _date(a['date_time']) ?? DateTime.now(),
+        reason: a['reason'],
+        status: AppointmentStatus.fromDb(a['status']),
+      );
+    }).toList();
+
+    return PatientSummary(
+      spent: _num(j['spent']),
+      due: _num(j['due']),
+      salesCount: int.tryParse(j['sales_count'].toString()) ?? 0,
+      visits: int.tryParse(j['visits'].toString()) ?? 0,
+      recordsCount: int.tryParse(j['records_count']?.toString() ?? '0') ?? 0,
+      firstVisit: _date(j['first_visit']),
+      lastVisit: _date(j['last_visit']),
+      nextVisit: _date(j['next_visit']),
+      sales: sales,
+      appointments: appointments,
+      topTreatments: (j['top_treatments'] as List? ?? []).map((e) {
+        final t = e as Map<String, dynamic>;
+        return TopTreatment(
+          name: t['name'] ?? '',
+          qty: int.tryParse(t['qty'].toString()) ?? 0,
+          amount: _num(t['amount']),
+        );
+      }).toList(),
+    );
   }
 }

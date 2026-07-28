@@ -10,10 +10,13 @@ import '../../../../core/pdf/pdf_exporter.dart';
 import '../../data/repositories/attachment_repository.dart';
 import '../../data/repositories/clinical_record_repository.dart';
 import '../../data/repositories/odontogram_repository.dart';
+import '../../data/repositories/patient_repository_impl.dart';
 import '../../domain/entities/attachment.dart';
 import '../../domain/entities/clinical_record.dart';
 import '../../domain/entities/patient.dart';
+import '../../domain/entities/patient_summary.dart';
 import '../widgets/odontogram_view.dart';
+import '../widgets/patient_summary_tab.dart';
 
 /// Historia clinica odontologica de un paciente:
 /// odontograma interactivo + registros clinicos detallados.
@@ -80,10 +83,17 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
 
   Future<void> _exportPdf() async {
     final teeth = await _odontogramRepo.getByPatient(widget.patient.id!);
+    PatientSummary? summary;
+    try {
+      summary = await PatientRepositoryImpl().summary(widget.patient.id!);
+    } catch (_) {
+      // el resumen economico es opcional en el informe
+    }
     await PdfExporter.patientHistory(
       patient: widget.patient,
       records: _records,
       teeth: teeth.values.toList(),
+      summary: summary,
     );
   }
 
@@ -91,7 +101,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   Widget build(BuildContext context) {
     final p = widget.patient;
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text('Historia clinica — ${p.fullName}'),
@@ -106,7 +116,10 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
             ),
           ],
           bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
+              Tab(icon: Icon(Icons.insights_outlined), text: 'Resumen'),
               Tab(icon: Icon(Icons.grid_view_outlined), text: 'Odontograma'),
               Tab(
                   icon: Icon(Icons.receipt_long_outlined),
@@ -150,6 +163,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
               Expanded(
                 child: TabBarView(
                   children: [
+                    PatientSummaryTab(patientId: p.id!),
                     OdontogramView(patientId: p.id!),
                     _buildRecords(),
                     _AttachmentsTab(patientId: p.id!),
