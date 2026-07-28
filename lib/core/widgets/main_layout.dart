@@ -15,12 +15,17 @@ class MainLayout extends StatelessWidget {
 
   final Widget child;
 
-  /// La pestana Usuarios solo aparece para el administrador.
+  /// Finanzas y Usuarios solo para el administrador.
   static List<({String route, IconData icon, String label})>
       get _destinations => [
             (route: '/dashboard', icon: Icons.dashboard_outlined, label: 'Dashboard'),
             (route: '/patients', icon: Icons.people_outline, label: 'Pacientes'),
             (route: '/appointments', icon: Icons.calendar_month_outlined, label: 'Citas'),
+            (route: '/sales', icon: Icons.point_of_sale_outlined, label: 'Cobros'),
+            if (Session.role == 'admin')
+              (route: '/finance', icon: Icons.insights_outlined, label: 'Finanzas'),
+            if (Session.role == 'admin')
+              (route: '/catalog', icon: Icons.sell_outlined, label: 'Servicios'),
             (route: '/reports', icon: Icons.bar_chart_outlined, label: 'Reportes'),
             if (Session.role == 'admin')
               (route: '/users', icon: Icons.manage_accounts_outlined, label: 'Usuarios'),

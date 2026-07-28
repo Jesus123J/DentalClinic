@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../../features/appointments/presentation/pages/appointments_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
+import '../../features/finance/presentation/pages/catalog_page.dart';
+import '../../features/finance/presentation/pages/finance_page.dart';
+import '../../features/finance/presentation/pages/sales_page.dart';
 import '../../features/patients/domain/entities/patient.dart';
 import '../../features/patients/presentation/pages/patient_history_page.dart';
 import '../../features/patients/presentation/pages/patients_page.dart';
@@ -39,6 +42,9 @@ class AppRouter {
           _tab('/dashboard', const DashboardPage()),
           _tab('/patients', const PatientsPage()),
           _tab('/appointments', const AppointmentsPage()),
+          _tab('/sales', const SalesPage()),
+          _tab('/finance', const FinancePage()),
+          _tab('/catalog', const CatalogPage()),
           _tab('/reports', const ReportsPage()),
           _tab('/users', const UsersPage()),
           // La historia clinica se abre "encima" de pacientes: aqui si dejamos

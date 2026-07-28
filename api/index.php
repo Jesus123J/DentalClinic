@@ -360,6 +360,204 @@ if (preg_match('#^/appointments/(\d+)$#', $path, $m) && $method === 'DELETE') {
     respond(['ok' => true]);
 }
 
+// ---------- Catalogo de tratamientos ----------
+if ($path === '/treatments' && $method === 'GET') {
+    respond(db()->query(
+        'SELECT * FROM treatments WHERE active = 1 ORDER BY name')->fetchAll());
+}
+
+if ($path === '/treatments' && $method === 'POST') {
+    $b = body();
+    db()->prepare(
+        'INSERT INTO treatments (name, description, price) VALUES (?, ?, ?)')
+        ->execute([$b['name'] ?? '', $b['description'] ?? null, $b['price'] ?? 0]);
+    respond(['id' => (int)db()->lastInsertId()], 201);
+}
+
+if (preg_match('#^/treatments/(\d+)$#', $path, $m)) {
+    $id = (int)$m[1];
+    if ($method === 'PUT') {
+        $b = body();
+        db()->prepare(
+            'UPDATE treatments SET name = ?, description = ?, price = ? WHERE id = ?')
+            ->execute([$b['name'] ?? '', $b['description'] ?? null, $b['price'] ?? 0, $id]);
+        respond(['ok' => true]);
+    }
+    if ($method === 'DELETE') {
+        // baja logica: las ventas historicas conservan el nombre del servicio
+        db()->prepare('UPDATE treatments SET active = 0 WHERE id = ?')->execute([$id]);
+        respond(['ok' => true]);
+    }
+}
+
+// ---------- Cobros / ventas ----------
+if ($path === '/sales' && $method === 'GET') {
+    $from = $_GET['from'] ?? date('Y-m-01');
+    $to = $_GET['to'] ?? date('Y-m-d');
+    $stmt = db()->prepare(
+        "SELECT s.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+         FROM sales s LEFT JOIN patients p ON p.id = s.patient_id
+         WHERE DATE(s.created_at) BETWEEN ? AND ?
+         ORDER BY s.created_at DESC");
+    $stmt->execute([$from, $to]);
+    respond($stmt->fetchAll());
+}
+
+if ($path === '/sales' && $method === 'POST') {
+    $b = body();
+    $items = $b['items'] ?? [];
+    if (!is_array($items) || count($items) === 0) {
+        respond(['error' => 'agregue al menos un servicio'], 400);
+    }
+    $total = 0;
+    foreach ($items as $it) {
+        $total += (float)($it['price'] ?? 0) * (int)($it['qty'] ?? 1);
+    }
+    $user = sessionUser();
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare(
+            'INSERT INTO sales (patient_id, user_id, total, paid, method, status, note)
+             VALUES (?, ?, ?, ?, ?, ?, ?)')
+            ->execute([
+                $b['patient_id'] ?: null, $user['id'] ?? null, $total,
+                $b['paid'] ?? $total, $b['method'] ?? 'efectivo',
+                $b['status'] ?? 'pagado', $b['note'] ?? null,
+            ]);
+        $saleId = (int)$pdo->lastInsertId();
+        $stmt = $pdo->prepare(
+            'INSERT INTO sale_items (sale_id, treatment_id, name, price, qty)
+             VALUES (?, ?, ?, ?, ?)');
+        foreach ($items as $it) {
+            $stmt->execute([
+                $saleId, $it['treatment_id'] ?: null, $it['name'] ?? '',
+                $it['price'] ?? 0, $it['qty'] ?? 1,
+            ]);
+        }
+        $pdo->commit();
+        respond(['id' => $saleId, 'total' => $total], 201);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        respond(['error' => 'no se pudo registrar el cobro'], 500);
+    }
+}
+
+if (preg_match('#^/sales/(\d+)$#', $path, $m) && $method === 'GET') {
+    $stmt = db()->prepare(
+        "SELECT s.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+                p.document_id
+         FROM sales s LEFT JOIN patients p ON p.id = s.patient_id WHERE s.id = ?");
+    $stmt->execute([(int)$m[1]]);
+    $sale = $stmt->fetch();
+    if ($sale === false) respond(['error' => 'no existe'], 404);
+    $items = db()->prepare('SELECT * FROM sale_items WHERE sale_id = ?');
+    $items->execute([(int)$m[1]]);
+    $sale['items'] = $items->fetchAll();
+    respond($sale);
+}
+
+if (preg_match('#^/sales/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    db()->prepare("UPDATE sales SET status = 'anulado' WHERE id = ?")
+        ->execute([(int)$m[1]]);
+    respond(['ok' => true]);
+}
+
+// ---------- Gastos ----------
+if ($path === '/expenses' && $method === 'GET') {
+    $from = $_GET['from'] ?? date('Y-m-01');
+    $to = $_GET['to'] ?? date('Y-m-d');
+    $stmt = db()->prepare(
+        'SELECT * FROM expenses WHERE spent_at BETWEEN ? AND ?
+         ORDER BY spent_at DESC, id DESC');
+    $stmt->execute([$from, $to]);
+    respond($stmt->fetchAll());
+}
+
+if ($path === '/expenses' && $method === 'POST') {
+    $b = body();
+    $user = sessionUser();
+    db()->prepare(
+        'INSERT INTO expenses (concept, category, amount, spent_at, user_id)
+         VALUES (?, ?, ?, ?, ?)')
+        ->execute([
+            $b['concept'] ?? '', $b['category'] ?? 'General',
+            $b['amount'] ?? 0, $b['spent_at'] ?? date('Y-m-d'),
+            $user['id'] ?? null,
+        ]);
+    respond(['id' => (int)db()->lastInsertId()], 201);
+}
+
+if (preg_match('#^/expenses/(\d+)$#', $path, $m) && $method === 'DELETE') {
+    db()->prepare('DELETE FROM expenses WHERE id = ?')->execute([(int)$m[1]]);
+    respond(['ok' => true]);
+}
+
+// ---------- Finanzas: resumen, series y ranking ----------
+if ($path === '/finance/summary' && $method === 'GET') {
+    $from = $_GET['from'] ?? date('Y-m-01');
+    $to = $_GET['to'] ?? date('Y-m-d');
+
+    $inc = db()->prepare(
+        "SELECT COALESCE(SUM(total),0) AS income, COUNT(*) AS count
+         FROM sales WHERE status <> 'anulado' AND DATE(created_at) BETWEEN ? AND ?");
+    $inc->execute([$from, $to]);
+    $income = $inc->fetch();
+
+    $exp = db()->prepare(
+        'SELECT COALESCE(SUM(amount),0) AS expenses FROM expenses
+         WHERE spent_at BETWEEN ? AND ?');
+    $exp->execute([$from, $to]);
+    $expenses = (float)$exp->fetch()['expenses'];
+
+    $today = db()->query(
+        "SELECT COALESCE(SUM(total),0) AS t FROM sales
+         WHERE status <> 'anulado' AND DATE(created_at) = CURDATE()")->fetch();
+
+    $pend = db()->prepare(
+        "SELECT COALESCE(SUM(total - paid),0) AS due FROM sales
+         WHERE status = 'pendiente' AND DATE(created_at) BETWEEN ? AND ?");
+    $pend->execute([$from, $to]);
+
+    // Serie mensual de los ultimos 6 meses (ingresos vs gastos)
+    $series = [];
+    for ($i = 5; $i >= 0; $i--) {
+        $month = date('Y-m', strtotime("-$i month"));
+        $si = db()->prepare(
+            "SELECT COALESCE(SUM(total),0) AS v FROM sales
+             WHERE status <> 'anulado' AND DATE_FORMAT(created_at, '%Y-%m') = ?");
+        $si->execute([$month]);
+        $se = db()->prepare(
+            "SELECT COALESCE(SUM(amount),0) AS v FROM expenses
+             WHERE DATE_FORMAT(spent_at, '%Y-%m') = ?");
+        $se->execute([$month]);
+        $series[] = [
+            'month' => $month,
+            'income' => (float)$si->fetch()['v'],
+            'expenses' => (float)$se->fetch()['v'],
+        ];
+    }
+
+    // Tratamientos mas vendidos del rango
+    $top = db()->prepare(
+        "SELECT i.name, SUM(i.qty) AS qty, SUM(i.price * i.qty) AS amount
+         FROM sale_items i JOIN sales s ON s.id = i.sale_id
+         WHERE s.status <> 'anulado' AND DATE(s.created_at) BETWEEN ? AND ?
+         GROUP BY i.name ORDER BY amount DESC LIMIT 6");
+    $top->execute([$from, $to]);
+
+    respond([
+        'income' => (float)$income['income'],
+        'sales_count' => (int)$income['count'],
+        'expenses' => $expenses,
+        'profit' => (float)$income['income'] - $expenses,
+        'today' => (float)$today['t'],
+        'pending' => (float)$pend->fetch()['due'],
+        'series' => $series,
+        'top_treatments' => $top->fetchAll(),
+    ]);
+}
+
 // ---------- Reportes ----------
 if ($path === '/reports/appointments' && $method === 'GET') {
     $stmt = db()->prepare(
