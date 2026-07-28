@@ -125,6 +125,15 @@ class FinanceRepository {
     return int.parse(data['id'].toString());
   }
 
+  /// Registra un pago del cobro. Sin [amount] salda todo lo pendiente.
+  Future<void> registerPayment(int id,
+      {double? amount, PaymentMethod? method}) async {
+    await _api.patch('/sales/$id/payment', {
+      'amount': ?amount,
+      'method': ?method?.dbValue,
+    });
+  }
+
   Future<void> voidSale(int id) async {
     await _api.delete('/sales/$id');
   }

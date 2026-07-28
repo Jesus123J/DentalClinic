@@ -139,6 +139,24 @@ class _SalesPageState extends State<SalesPage> {
     );
   }
 
+  /// Registra el pago de un cobro pendiente (total o abono parcial).
+  Future<void> _registerPayment(Sale sale) async {
+    final result = await showDialog<({double? amount, PaymentMethod method})>(
+      context: context,
+      builder: (_) => _PaymentDialog(sale: sale),
+    );
+    if (result == null) return;
+    try {
+      await _repo.registerPayment(sale.id,
+          amount: result.amount, method: result.method);
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo registrar: $e')));
+    }
+  }
+
   Future<void> _void(Sale sale) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -247,8 +265,12 @@ class _SalesPageState extends State<SalesPage> {
                 decoration: anulado ? TextDecoration.lineThrough : null,
               ),
             ),
-            subtitle: Text(
-                '${DateFormat('dd/MM/yyyy HH:mm').format(s.createdAt)}  ·  ${s.method.label}'),
+            subtitle: Text([
+              DateFormat('dd/MM/yyyy HH:mm').format(s.createdAt),
+              s.method.label,
+              if (s.status == 'pendiente' && s.paid > 0)
+                'abonado ${formatMoney(s.paid)}',
+            ].join('  ·  ')),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -258,11 +280,28 @@ class _SalesPageState extends State<SalesPage> {
                   children: [
                     Text(formatMoney(s.total),
                         style: const TextStyle(fontWeight: FontWeight.w600)),
-                    Text(s.status,
-                        style: TextStyle(
-                            fontSize: 11, color: _statusColor(s.status))),
+                    Text(
+                      s.status == 'pendiente'
+                          ? 'debe ${formatMoney(s.due)}'
+                          : s.status,
+                      style: TextStyle(
+                          fontSize: 11, color: _statusColor(s.status)),
+                    ),
                   ],
                 ),
+                const SizedBox(width: 8),
+                if (s.status == 'pendiente')
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      backgroundColor: const Color(0xFF0CA30C),
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => _registerPayment(s),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Registrar pago'),
+                  ),
                 if (!anulado)
                   IconButton(
                     tooltip: 'Anular',
@@ -274,6 +313,137 @@ class _SalesPageState extends State<SalesPage> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Dialogo para registrar el pago de un cobro pendiente.
+class _PaymentDialog extends StatefulWidget {
+  const _PaymentDialog({required this.sale});
+
+  final Sale sale;
+
+  @override
+  State<_PaymentDialog> createState() => _PaymentDialogState();
+}
+
+class _PaymentDialogState extends State<_PaymentDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final _amount =
+      TextEditingController(text: widget.sale.due.toStringAsFixed(2));
+  late PaymentMethod _method = widget.sale.method;
+  bool _partial = false;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final due = widget.sale.due;
+    return AlertDialog(
+      title: const Text('Registrar pago'),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 16,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFAB219).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.sale.patientName ?? 'Sin paciente',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    Text('Total: ${formatMoney(widget.sale.total)}'),
+                    if (widget.sale.paid > 0)
+                      Text('Ya abonado: ${formatMoney(widget.sale.paid)}'),
+                    Text(
+                      'Pendiente: ${formatMoney(due)}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Pago parcial (abono)'),
+                subtitle: Text(_partial
+                    ? 'Indica cuanto abona ahora'
+                    : 'Se registra el pago completo'),
+                value: _partial,
+                onChanged: (v) => setState(() {
+                  _partial = v;
+                  _amount.text = due.toStringAsFixed(2);
+                }),
+              ),
+              if (_partial)
+                TextFormField(
+                  controller: _amount,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Monto que abona *', prefixText: 'S/ '),
+                  validator: (v) {
+                    final value =
+                        double.tryParse((v ?? '').replaceAll(',', '.'));
+                    if (value == null || value <= 0) return 'Monto invalido';
+                    if (value > due) {
+                      return 'No puede superar ${formatMoney(due)}';
+                    }
+                    return null;
+                  },
+                ),
+              DropdownButtonFormField<PaymentMethod>(
+                initialValue: _method,
+                isExpanded: true,
+                decoration:
+                    const InputDecoration(labelText: 'Metodo de pago'),
+                items: [
+                  for (final m in PaymentMethod.values)
+                    DropdownMenuItem(value: m, child: Text(m.label)),
+                ],
+                onChanged: (m) =>
+                    setState(() => _method = m ?? PaymentMethod.efectivo),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF0CA30C),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () {
+            if (_partial && !_formKey.currentState!.validate()) return;
+            Navigator.of(context).pop((
+              amount: _partial
+                  ? double.parse(_amount.text.replaceAll(',', '.'))
+                  : null,
+              method: _method,
+            ));
+          },
+          child: Text(_partial ? 'Registrar abono' : 'Marcar como pagado'),
+        ),
+      ],
     );
   }
 }

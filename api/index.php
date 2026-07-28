@@ -457,6 +457,35 @@ if (preg_match('#^/sales/(\d+)$#', $path, $m) && $method === 'GET') {
     respond($sale);
 }
 
+// Registrar pago (total o abono parcial) de un cobro pendiente.
+if (preg_match('#^/sales/(\d+)/payment$#', $path, $m) && $method === 'PATCH') {
+    $id = (int)$m[1];
+    $stmt = db()->prepare('SELECT total, paid, status FROM sales WHERE id = ?');
+    $stmt->execute([$id]);
+    $sale = $stmt->fetch();
+    if ($sale === false) respond(['error' => 'no existe'], 404);
+    if ($sale['status'] === 'anulado') {
+        respond(['error' => 'el cobro esta anulado'], 400);
+    }
+    $b = body();
+    // Sin monto = se salda el total pendiente.
+    $amount = isset($b['amount']) ? (float)$b['amount']
+        : (float)$sale['total'] - (float)$sale['paid'];
+    if ($amount <= 0) respond(['error' => 'monto invalido'], 400);
+
+    $paid = min((float)$sale['paid'] + $amount, (float)$sale['total']);
+    $status = $paid >= (float)$sale['total'] ? 'pagado' : 'pendiente';
+    $params = [$paid, $status, $id];
+    $sql = 'UPDATE sales SET paid = ?, status = ?';
+    if (!empty($b['method'])) {
+        $sql .= ', method = ?';
+        $params = [$paid, $status, $b['method'], $id];
+    }
+    $sql .= ' WHERE id = ?';
+    db()->prepare($sql)->execute($params);
+    respond(['ok' => true, 'paid' => $paid, 'status' => $status]);
+}
+
 if (preg_match('#^/sales/(\d+)$#', $path, $m) && $method === 'DELETE') {
     db()->prepare("UPDATE sales SET status = 'anulado' WHERE id = ?")
         ->execute([(int)$m[1]]);
