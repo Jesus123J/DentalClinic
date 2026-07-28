@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/appointments/presentation/pages/appointments_page.dart';
+import '../../features/audit/presentation/pages/audit_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/finance/presentation/pages/catalog_page.dart';
@@ -47,6 +48,7 @@ class AppRouter {
           _tab('/catalog', const CatalogPage()),
           _tab('/reports', const ReportsPage()),
           _tab('/users', const UsersPage()),
+          _tab('/audit', const AuditPage()),
           // La historia clinica se abre "encima" de pacientes: aqui si dejamos
           // una transicion suave de fundido.
           GoRoute(

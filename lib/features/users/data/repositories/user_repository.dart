@@ -1,4 +1,4 @@
-import '../../../../core/api/api_client.dart';
+﻿import '../../../../core/api/api_client.dart';
 import '../../domain/entities/app_user.dart';
 
 class UserRepository {
@@ -37,7 +37,7 @@ class UserRepository {
     await _api.patch('/users/$id/active', {'active': active});
   }
 
-  Future<void> delete(int id) async {
-    await _api.delete('/users/$id');
+  Future<void> delete(int id, {String? reason}) async {
+    await _api.delete('/users/$id', reason: reason);
   }
 }

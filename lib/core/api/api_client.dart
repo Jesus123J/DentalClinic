@@ -48,8 +48,14 @@ class ApiClient {
       _decode(await http.patch(_uri(path),
           headers: _headers, body: jsonEncode(body)));
 
-  Future<void> delete(String path) async =>
-      _decode(await http.delete(_uri(path), headers: _headers));
+  /// Las bajas son logicas y exigen un motivo, que viaja en el cuerpo.
+  Future<void> delete(String path, {String? reason}) async => _decode(
+        await http.delete(
+          _uri(path),
+          headers: _headers,
+          body: jsonEncode({'reason': ?reason}),
+        ),
+      );
 
   /// Descarga el contenido binario de un recurso (imagenes, PDFs).
   Future<List<int>> getBytes(String path, [Map<String, String>? query]) async {

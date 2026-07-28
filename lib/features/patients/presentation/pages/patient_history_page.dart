@@ -6,7 +6,9 @@ import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/auth/session.dart';
 import '../../../../core/pdf/pdf_exporter.dart';
+import '../../../../core/widgets/deactivate_dialog.dart';
 import '../../data/repositories/attachment_repository.dart';
 import '../../data/repositories/clinical_record_repository.dart';
 import '../../data/repositories/odontogram_repository.dart';
@@ -59,26 +61,21 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   }
 
   Future<void> _deleteRecord(ClinicalRecord record) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar registro'),
-        content: const Text('Se eliminara esta entrada de la historia clinica.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
+    final reason = await DeactivateDialog.show(
+      context,
+      title: 'Dar de baja registro clinico',
+      itemLabel: '${DateFormat('dd/MM/yyyy').format(record.recordDate)} - '
+          '${record.diagnosis}',
     );
-    if (confirm != true) return;
-    await _repo.delete(record.id!);
-    _load();
+    if (reason == null) return;
+    try {
+      await _repo.delete(record.id!, reason: reason);
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo dar de baja: $e')));
+    }
   }
 
   Future<void> _exportPdf() async {
@@ -130,11 +127,13 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
             ],
           ),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _addRecord,
-          icon: const Icon(Icons.note_add_outlined),
-          label: const Text('Nuevo registro'),
-        ),
+        floatingActionButton: Session.can('clinical.edit')
+            ? FloatingActionButton.extended(
+                onPressed: _addRecord,
+                icon: const Icon(Icons.note_add_outlined),
+                label: const Text('Nuevo registro'),
+              )
+            : null,
         body: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -201,11 +200,13 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
               if (r.tooth != null && r.tooth!.isNotEmpty) 'Pieza ${r.tooth}',
               if (r.procedureType != null) r.procedureType!,
             ].join('  ·  ')),
-            trailing: IconButton(
-              tooltip: 'Eliminar',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => _deleteRecord(r),
-            ),
+            trailing: Session.can('clinical.deactivate')
+                ? IconButton(
+                    tooltip: 'Dar de baja',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _deleteRecord(r),
+                  )
+                : null,
             childrenPadding: const EdgeInsets.fromLTRB(72, 0, 24, 16),
             expandedCrossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -426,26 +427,20 @@ class _AttachmentsTabState extends State<_AttachmentsTab> {
   }
 
   Future<void> _delete(Attachment file) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar archivo'),
-        content: Text('Se eliminara "${file.name}" definitivamente.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
+    final reason = await DeactivateDialog.show(
+      context,
+      title: 'Dar de baja archivo',
+      itemLabel: file.name,
     );
-    if (confirm != true) return;
-    await _repo.delete(file.id);
-    _load();
+    if (reason == null) return;
+    try {
+      await _repo.delete(file.id, reason: reason);
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo dar de baja: $e')));
+    }
   }
 
   @override
@@ -461,16 +456,17 @@ class _AttachmentsTabState extends State<_AttachmentsTab> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            FilledButton.icon(
-              onPressed: _uploading ? null : _upload,
-              icon: _uploading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.upload_file),
-              label: Text(_uploading ? 'Subiendo…' : 'Subir archivo'),
-            ),
+            if (Session.can('attachments.upload'))
+              FilledButton.icon(
+                onPressed: _uploading ? null : _upload,
+                icon: _uploading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.upload_file),
+                label: Text(_uploading ? 'Subiendo…' : 'Subir archivo'),
+              ),
           ],
         ),
         const SizedBox(height: 12),
@@ -528,11 +524,12 @@ class _AttachmentsTabState extends State<_AttachmentsTab> {
                   icon: const Icon(Icons.open_in_new),
                   onPressed: () => _openInBrowser(f),
                 ),
-                IconButton(
-                  tooltip: 'Eliminar',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _delete(f),
-                ),
+                if (Session.can('attachments.deactivate'))
+                  IconButton(
+                    tooltip: 'Dar de baja',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _delete(f),
+                  ),
               ],
             ),
           ),

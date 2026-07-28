@@ -77,12 +77,56 @@ function sessionUser(): ?array {
     return $user === false ? null : $user;
 }
 
-function requireAdmin(): array {
+require_once __DIR__ . '/permissions.php';
+
+/** Corta la peticion si el usuario no tiene el permiso indicado. */
+function requirePermission(string $permission): array {
     $user = sessionUser();
-    if ($user === null || $user['role'] !== 'admin') {
-        respond(['error' => 'solo el administrador puede gestionar usuarios'], 403);
+    if ($user === null) respond(['error' => 'no autorizado'], 401);
+    if (!roleCan($user['role'], $permission)) {
+        $what = PERMISSION_LABELS[$permission] ?? $permission;
+        respond([
+            'error' => "tu rol ({$user['role']}) no tiene permiso para $what",
+        ], 403);
     }
     return $user;
+}
+
+function requireAdmin(): array {
+    return requirePermission('users.manage');
+}
+
+/** Deja constancia de la operacion en la bitacora de auditoria. */
+function audit(string $action, string $entity, ?int $entityId,
+               ?string $description = null, ?string $reason = null): void {
+    $user = sessionUser();
+    db()->prepare(
+        'INSERT INTO audit_log
+         (user_id, user_name, user_role, action, entity, entity_id, description, reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        ->execute([
+            $user['id'] ?? null, $user['full_name'] ?? null,
+            $user['role'] ?? null, $action, $entity, $entityId,
+            $description, $reason,
+        ]);
+}
+
+/**
+ * Baja logica: el registro desaparece para la app pero sigue en la base.
+ * Exige un motivo y queda auditado; solo 'sistemas' puede reactivarlo.
+ */
+function softDelete(string $table, int $id, string $entity): void {
+    $b = body();
+    $reason = trim($b['reason'] ?? '');
+    if ($reason === '') {
+        respond(['error' => 'debes indicar el motivo de la baja'], 400);
+    }
+    $user = sessionUser();
+    db()->prepare(
+        "UPDATE $table SET active = 0, deactivated_at = NOW(),
+         deactivated_by = ?, deactivate_reason = ? WHERE id = ?")
+        ->execute([$user['full_name'] ?? null, $reason, $id]);
+    audit('desactivar', $entity, $id, null, $reason);
 }
 
 // ---------- Ruta ----------
@@ -121,6 +165,11 @@ if ($path === '/auth/login' && $method === 'POST') {
     $token = bin2hex(random_bytes(32));
     db()->prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)')
         ->execute([$token, $user['id']]);
+    db()->prepare(
+        'INSERT INTO audit_log (user_id, user_name, user_role, action, entity)
+         VALUES (?, ?, ?, ?, ?)')
+        ->execute([$user['id'], $user['full_name'], $user['role'],
+                   'inicio de sesion', 'sesion']);
     respond([
         'token' => $token,
         'user' => [
@@ -129,6 +178,8 @@ if ($path === '/auth/login' && $method === 'POST') {
             'full_name' => $user['full_name'],
             'role' => $user['role'],
         ],
+        // La app usa esto para mostrar solo lo que el rol puede hacer
+        'permissions' => permissionsOf($user['role']),
     ]);
 }
 
@@ -139,20 +190,24 @@ if ($path === '/auth/logout' && $method === 'POST') {
 
 // ---------- Pacientes ----------
 if ($path === '/patients' && $method === 'GET') {
+    requirePermission('patients.view');
     $q = trim($_GET['q'] ?? '');
     if ($q !== '') {
         $stmt = db()->prepare(
             "SELECT * FROM patients
-             WHERE CONCAT(first_name, ' ', last_name) LIKE ? OR document_id LIKE ?
+             WHERE active = 1 AND (CONCAT(first_name, ' ', last_name) LIKE ?
+                                   OR document_id LIKE ?)
              ORDER BY last_name, first_name");
         $stmt->execute(["%$q%", "%$q%"]);
     } else {
-        $stmt = db()->query('SELECT * FROM patients ORDER BY last_name, first_name');
+        $stmt = db()->query(
+            'SELECT * FROM patients WHERE active = 1 ORDER BY last_name, first_name');
     }
     respond($stmt->fetchAll());
 }
 
 if ($path === '/patients' && $method === 'POST') {
+    requirePermission('patients.edit');
     $b = body();
     db()->prepare(
         'INSERT INTO patients (first_name, last_name, document_id, phone, email, birth_date, allergies, notes)
@@ -162,12 +217,16 @@ if ($path === '/patients' && $method === 'POST') {
             $b['phone'] ?? null, $b['email'] ?? null, $b['birth_date'] ?? null,
             $b['allergies'] ?? null, $b['notes'] ?? null,
         ]);
-    respond(['id' => (int)db()->lastInsertId()], 201);
+    $newId = (int)db()->lastInsertId();
+    audit('crear', 'paciente', $newId,
+        trim(($b['first_name'] ?? '') . ' ' . ($b['last_name'] ?? '')));
+    respond(['id' => $newId], 201);
 }
 
 if (preg_match('#^/patients/(\d+)$#', $path, $m)) {
     $id = (int)$m[1];
     if ($method === 'GET') {
+        requirePermission('patients.view');
         $stmt = db()->prepare('SELECT * FROM patients WHERE id = ?');
         $stmt->execute([$id]);
         $p = $stmt->fetch();
@@ -175,6 +234,7 @@ if (preg_match('#^/patients/(\d+)$#', $path, $m)) {
         respond($p);
     }
     if ($method === 'PUT') {
+        requirePermission('patients.edit');
         $b = body();
         db()->prepare(
             'UPDATE patients SET first_name = ?, last_name = ?, document_id = ?,
@@ -184,24 +244,29 @@ if (preg_match('#^/patients/(\d+)$#', $path, $m)) {
                 $b['phone'] ?? null, $b['email'] ?? null, $b['birth_date'] ?? null,
                 $b['allergies'] ?? null, $b['notes'] ?? null, $id,
             ]);
+        audit('editar', 'paciente', $id,
+            trim(($b['first_name'] ?? '') . ' ' . ($b['last_name'] ?? '')));
         respond(['ok' => true]);
     }
     if ($method === 'DELETE') {
-        db()->prepare('DELETE FROM patients WHERE id = ?')->execute([$id]);
+        requirePermission('patients.deactivate');
+        softDelete('patients', $id, 'paciente');
         respond(['ok' => true]);
     }
 }
 
 // ---------- Historia clinica ----------
 if ($path === '/clinical-records' && $method === 'GET') {
+    requirePermission('clinical.view');
     $stmt = db()->prepare(
-        'SELECT * FROM clinical_records WHERE patient_id = ?
+        'SELECT * FROM clinical_records WHERE patient_id = ? AND active = 1
          ORDER BY record_date DESC, id DESC');
     $stmt->execute([(int)($_GET['patientId'] ?? 0)]);
     respond($stmt->fetchAll());
 }
 
 if ($path === '/clinical-records' && $method === 'POST') {
+    requirePermission('clinical.edit');
     $b = body();
     db()->prepare(
         'INSERT INTO clinical_records
@@ -215,24 +280,30 @@ if ($path === '/clinical-records' && $method === 'POST') {
             $b['clinical_exam'] ?? null, $b['treatment'] ?? null,
             $b['prescription'] ?? null, $b['observations'] ?? null,
         ]);
-    respond(['id' => (int)db()->lastInsertId()], 201);
+    $newId = (int)db()->lastInsertId();
+    audit('crear', 'registro clinico', $newId, $b['diagnosis'] ?? null);
+    respond(['id' => $newId], 201);
 }
 
 if (preg_match('#^/clinical-records/(\d+)$#', $path, $m) && $method === 'DELETE') {
-    db()->prepare('DELETE FROM clinical_records WHERE id = ?')->execute([(int)$m[1]]);
+    requirePermission('clinical.deactivate');
+    softDelete('clinical_records', (int)$m[1], 'registro clinico');
     respond(['ok' => true]);
 }
 
 // ---------- Archivos adjuntos de la historia clinica ----------
 if ($path === '/attachments' && $method === 'GET') {
+    requirePermission('attachments.view');
     $stmt = db()->prepare(
         'SELECT id, patient_id, original_name, mime, size, uploaded_at
-         FROM attachments WHERE patient_id = ? ORDER BY uploaded_at DESC');
+         FROM attachments WHERE patient_id = ? AND active = 1
+         ORDER BY uploaded_at DESC');
     $stmt->execute([(int)($_GET['patientId'] ?? 0)]);
     respond($stmt->fetchAll());
 }
 
 if ($path === '/attachments' && $method === 'POST') {
+    requirePermission('attachments.upload');
     if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
         respond(['error' => 'archivo no recibido'], 400);
     }
@@ -281,24 +352,22 @@ if (preg_match('#^/attachments/(\d+)/download$#', $path, $m) && $method === 'GET
 }
 
 if (preg_match('#^/attachments/(\d+)$#', $path, $m) && $method === 'DELETE') {
-    $stmt = db()->prepare('SELECT stored_name FROM attachments WHERE id = ?');
-    $stmt->execute([(int)$m[1]]);
-    $att = $stmt->fetch();
-    if ($att !== false) {
-        @unlink(__DIR__ . '/uploads/' . $att['stored_name']);
-        db()->prepare('DELETE FROM attachments WHERE id = ?')->execute([(int)$m[1]]);
-    }
+    requirePermission('attachments.deactivate');
+    // El archivo fisico se conserva: la baja es logica y reversible.
+    softDelete('attachments', (int)$m[1], 'archivo adjunto');
     respond(['ok' => true]);
 }
 
 // ---------- Odontograma ----------
 if ($path === '/odontogram' && $method === 'GET') {
+    requirePermission('clinical.view');
     $stmt = db()->prepare('SELECT * FROM odontogram WHERE patient_id = ?');
     $stmt->execute([(int)($_GET['patientId'] ?? 0)]);
     respond($stmt->fetchAll());
 }
 
 if ($path === '/odontogram' && $method === 'PUT') {
+    requirePermission('clinical.edit');
     $b = body();
     $patientId = (int)($b['patient_id'] ?? 0);
     $tooth = $b['tooth'] ?? '';
@@ -359,24 +428,27 @@ if ($path === '/odontogram/history' && $method === 'GET') {
 
 // ---------- Citas ----------
 if ($path === '/appointments' && $method === 'GET') {
+    requirePermission('appointments.view');
     // Por dia (?date=) o por rango (?from=&to=) para el calendario.
     if (isset($_GET['from'], $_GET['to'])) {
         $stmt = db()->prepare(
             "SELECT a.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
              FROM appointments a JOIN patients p ON p.id = a.patient_id
-             WHERE DATE(a.date_time) BETWEEN ? AND ? ORDER BY a.date_time");
+             WHERE a.active = 1 AND DATE(a.date_time) BETWEEN ? AND ?
+             ORDER BY a.date_time");
         $stmt->execute([$_GET['from'], $_GET['to']]);
     } else {
         $stmt = db()->prepare(
             "SELECT a.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
              FROM appointments a JOIN patients p ON p.id = a.patient_id
-             WHERE DATE(a.date_time) = ? ORDER BY a.date_time");
+             WHERE a.active = 1 AND DATE(a.date_time) = ? ORDER BY a.date_time");
         $stmt->execute([$_GET['date'] ?? date('Y-m-d')]);
     }
     respond($stmt->fetchAll());
 }
 
 if ($path === '/appointments' && $method === 'POST') {
+    requirePermission('appointments.edit');
     $b = body();
     db()->prepare(
         'INSERT INTO appointments (patient_id, date_time, reason, status) VALUES (?, ?, ?, ?)')
@@ -384,65 +456,79 @@ if ($path === '/appointments' && $method === 'POST') {
             $b['patient_id'] ?? 0, $b['date_time'] ?? null,
             $b['reason'] ?? null, $b['status'] ?? 'pendiente',
         ]);
-    respond(['id' => (int)db()->lastInsertId()], 201);
+    $newId = (int)db()->lastInsertId();
+    audit('crear', 'cita', $newId, $b['date_time'] ?? null);
+    respond(['id' => $newId], 201);
 }
 
 if (preg_match('#^/appointments/(\d+)/status$#', $path, $m) && $method === 'PATCH') {
+    requirePermission('appointments.edit');
     $b = body();
+    $status = $b['status'] ?? 'pendiente';
     db()->prepare('UPDATE appointments SET status = ? WHERE id = ?')
-        ->execute([$b['status'] ?? 'pendiente', (int)$m[1]]);
+        ->execute([$status, (int)$m[1]]);
+    audit('cambiar estado', 'cita', (int)$m[1], "estado: $status");
     respond(['ok' => true]);
 }
 
 if (preg_match('#^/appointments/(\d+)$#', $path, $m) && $method === 'DELETE') {
-    db()->prepare('DELETE FROM appointments WHERE id = ?')->execute([(int)$m[1]]);
+    requirePermission('appointments.deactivate');
+    softDelete('appointments', (int)$m[1], 'cita');
     respond(['ok' => true]);
 }
 
 // ---------- Catalogo de tratamientos ----------
 if ($path === '/treatments' && $method === 'GET') {
+    requirePermission('sales.view');
     respond(db()->query(
         'SELECT * FROM treatments WHERE active = 1 ORDER BY name')->fetchAll());
 }
 
 if ($path === '/treatments' && $method === 'POST') {
+    requirePermission('treatments.manage');
     $b = body();
     db()->prepare(
         'INSERT INTO treatments (name, description, price) VALUES (?, ?, ?)')
         ->execute([$b['name'] ?? '', $b['description'] ?? null, $b['price'] ?? 0]);
-    respond(['id' => (int)db()->lastInsertId()], 201);
+    $newId = (int)db()->lastInsertId();
+    audit('crear', 'servicio', $newId, $b['name'] ?? null);
+    respond(['id' => $newId], 201);
 }
 
 if (preg_match('#^/treatments/(\d+)$#', $path, $m)) {
     $id = (int)$m[1];
     if ($method === 'PUT') {
+        requirePermission('treatments.manage');
         $b = body();
         db()->prepare(
             'UPDATE treatments SET name = ?, description = ?, price = ? WHERE id = ?')
             ->execute([$b['name'] ?? '', $b['description'] ?? null, $b['price'] ?? 0, $id]);
+        audit('editar', 'servicio', $id, $b['name'] ?? null);
         respond(['ok' => true]);
     }
     if ($method === 'DELETE') {
-        // baja logica: las ventas historicas conservan el nombre del servicio
-        db()->prepare('UPDATE treatments SET active = 0 WHERE id = ?')->execute([$id]);
+        requirePermission('treatments.manage');
+        softDelete('treatments', $id, 'servicio');
         respond(['ok' => true]);
     }
 }
 
 // ---------- Cobros / ventas ----------
 if ($path === '/sales' && $method === 'GET') {
+    requirePermission('sales.view');
     $from = $_GET['from'] ?? date('Y-m-01');
     $to = $_GET['to'] ?? date('Y-m-d');
     $stmt = db()->prepare(
         "SELECT s.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
          FROM sales s LEFT JOIN patients p ON p.id = s.patient_id
-         WHERE DATE(s.created_at) BETWEEN ? AND ?
+         WHERE s.active = 1 AND DATE(s.created_at) BETWEEN ? AND ?
          ORDER BY s.created_at DESC");
     $stmt->execute([$from, $to]);
     respond($stmt->fetchAll());
 }
 
 if ($path === '/sales' && $method === 'POST') {
+    requirePermission('sales.create');
     $b = body();
     $items = $b['items'] ?? [];
     if (!is_array($items) || count($items) === 0) {
@@ -475,6 +561,7 @@ if ($path === '/sales' && $method === 'POST') {
             ]);
         }
         $pdo->commit();
+        audit('crear', 'cobro', $saleId, 'total S/ ' . number_format($total, 2));
         respond(['id' => $saleId, 'total' => $total], 201);
     } catch (Exception $e) {
         $pdo->rollBack();
@@ -483,6 +570,7 @@ if ($path === '/sales' && $method === 'POST') {
 }
 
 if (preg_match('#^/sales/(\d+)$#', $path, $m) && $method === 'GET') {
+    requirePermission('sales.view');
     $stmt = db()->prepare(
         "SELECT s.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
                 p.document_id
@@ -498,6 +586,7 @@ if (preg_match('#^/sales/(\d+)$#', $path, $m) && $method === 'GET') {
 
 // Registrar pago (total o abono parcial) de un cobro pendiente.
 if (preg_match('#^/sales/(\d+)/payment$#', $path, $m) && $method === 'PATCH') {
+    requirePermission('sales.payment');
     $id = (int)$m[1];
     $stmt = db()->prepare('SELECT total, paid, status FROM sales WHERE id = ?');
     $stmt->execute([$id]);
@@ -522,27 +611,42 @@ if (preg_match('#^/sales/(\d+)/payment$#', $path, $m) && $method === 'PATCH') {
     }
     $sql .= ' WHERE id = ?';
     db()->prepare($sql)->execute($params);
+    audit('registrar pago', 'cobro', $id,
+        'pagado S/ ' . number_format($paid, 2) . " - $status");
     respond(['ok' => true, 'paid' => $paid, 'status' => $status]);
 }
 
 if (preg_match('#^/sales/(\d+)$#', $path, $m) && $method === 'DELETE') {
-    db()->prepare("UPDATE sales SET status = 'anulado' WHERE id = ?")
-        ->execute([(int)$m[1]]);
+    requirePermission('sales.void');
+    $id = (int)$m[1];
+    $b = body();
+    $reason = trim($b['reason'] ?? '');
+    if ($reason === '') {
+        respond(['error' => 'debes indicar el motivo de la anulacion'], 400);
+    }
+    $user = sessionUser();
+    db()->prepare(
+        "UPDATE sales SET status = 'anulado', deactivated_at = NOW(),
+         deactivated_by = ?, deactivate_reason = ? WHERE id = ?")
+        ->execute([$user['full_name'] ?? null, $reason, $id]);
+    audit('anular', 'cobro', $id, null, $reason);
     respond(['ok' => true]);
 }
 
 // ---------- Gastos ----------
 if ($path === '/expenses' && $method === 'GET') {
+    requirePermission('expenses.manage');
     $from = $_GET['from'] ?? date('Y-m-01');
     $to = $_GET['to'] ?? date('Y-m-d');
     $stmt = db()->prepare(
-        'SELECT * FROM expenses WHERE spent_at BETWEEN ? AND ?
+        'SELECT * FROM expenses WHERE active = 1 AND spent_at BETWEEN ? AND ?
          ORDER BY spent_at DESC, id DESC');
     $stmt->execute([$from, $to]);
     respond($stmt->fetchAll());
 }
 
 if ($path === '/expenses' && $method === 'POST') {
+    requirePermission('expenses.manage');
     $b = body();
     $user = sessionUser();
     db()->prepare(
@@ -553,16 +657,20 @@ if ($path === '/expenses' && $method === 'POST') {
             $b['amount'] ?? 0, $b['spent_at'] ?? date('Y-m-d'),
             $user['id'] ?? null,
         ]);
-    respond(['id' => (int)db()->lastInsertId()], 201);
+    $newId = (int)db()->lastInsertId();
+    audit('crear', 'gasto', $newId, $b['concept'] ?? null);
+    respond(['id' => $newId], 201);
 }
 
 if (preg_match('#^/expenses/(\d+)$#', $path, $m) && $method === 'DELETE') {
-    db()->prepare('DELETE FROM expenses WHERE id = ?')->execute([(int)$m[1]]);
+    requirePermission('expenses.manage');
+    softDelete('expenses', (int)$m[1], 'gasto');
     respond(['ok' => true]);
 }
 
 // ---------- Finanzas: resumen, series y ranking ----------
 if ($path === '/finance/summary' && $method === 'GET') {
+    requirePermission('finance.view');
     $from = $_GET['from'] ?? date('Y-m-01');
     $to = $_GET['to'] ?? date('Y-m-d');
 
@@ -696,6 +804,88 @@ if (preg_match('#^/patients/(\d+)/summary$#', $path, $m) && $method === 'GET') {
     ]);
 }
 
+// ---------- Auditoria: quien hizo que y cuando ----------
+if ($path === '/audit' && $method === 'GET') {
+    requirePermission('audit.view');
+    $where = [];
+    $params = [];
+    if (!empty($_GET['from'])) {
+        $where[] = 'DATE(created_at) >= ?';
+        $params[] = $_GET['from'];
+    }
+    if (!empty($_GET['to'])) {
+        $where[] = 'DATE(created_at) <= ?';
+        $params[] = $_GET['to'];
+    }
+    if (!empty($_GET['entity'])) {
+        $where[] = 'entity = ?';
+        $params[] = $_GET['entity'];
+    }
+    if (!empty($_GET['user'])) {
+        $where[] = 'user_name LIKE ?';
+        $params[] = '%' . $_GET['user'] . '%';
+    }
+    $sql = 'SELECT * FROM audit_log';
+    if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
+    $sql .= ' ORDER BY created_at DESC, id DESC LIMIT 500';
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    respond($stmt->fetchAll());
+}
+
+// ---------- Papelera: solo el ingeniero de sistemas ----------
+const TRASH_TABLES = [
+    'patients' => ["CONCAT(first_name, ' ', last_name)", 'paciente'],
+    'appointments' => ['date_time', 'cita'],
+    'clinical_records' => ['diagnosis', 'registro clinico'],
+    'attachments' => ['original_name', 'archivo adjunto'],
+    'sales' => ["CONCAT('Cobro S/ ', total)", 'cobro'],
+    'expenses' => ['concept', 'gasto'],
+    'treatments' => ['name', 'servicio'],
+    'users' => ['full_name', 'usuario'],
+];
+
+if ($path === '/trash' && $method === 'GET') {
+    requirePermission('trash.view');
+    $rows = [];
+    foreach (TRASH_TABLES as $table => [$labelExpr, $entity]) {
+        $stmt = db()->query(
+            "SELECT id, $labelExpr AS label, deactivated_at, deactivated_by,
+                    deactivate_reason
+             FROM $table WHERE active = 0 ORDER BY deactivated_at DESC");
+        foreach ($stmt->fetchAll() as $r) {
+            $r['table'] = $table;
+            $r['entity'] = $entity;
+            $rows[] = $r;
+        }
+    }
+    usort($rows, fn($a, $b) =>
+        strcmp($b['deactivated_at'] ?? '', $a['deactivated_at'] ?? ''));
+    respond($rows);
+}
+
+if (preg_match('#^/trash/([a-z_]+)/(\d+)/restore$#', $path, $m)
+        && $method === 'POST') {
+    requirePermission('trash.restore');
+    $table = $m[1];
+    $id = (int)$m[2];
+    if (!array_key_exists($table, TRASH_TABLES)) {
+        respond(['error' => 'entidad no valida'], 400);
+    }
+    $b = body();
+    $reason = trim($b['reason'] ?? '');
+    if ($reason === '') {
+        respond(['error' => 'debes indicar el motivo de la reactivacion'], 400);
+    }
+    $extra = $table === 'sales' ? ", status = 'pagado'" : '';
+    db()->prepare(
+        "UPDATE $table SET active = 1, deactivated_at = NULL,
+         deactivated_by = NULL, deactivate_reason = NULL $extra WHERE id = ?")
+        ->execute([$id]);
+    audit('reactivar', TRASH_TABLES[$table][1], $id, null, $reason);
+    respond(['ok' => true]);
+}
+
 // ---------- Reportes ----------
 if ($path === '/reports/appointments' && $method === 'GET') {
     $stmt = db()->prepare(
@@ -722,7 +912,8 @@ if ($path === '/reports/dashboard' && $method === 'GET') {
 if ($path === '/users' && $method === 'GET') {
     requireAdmin();
     respond(db()->query(
-        'SELECT id, username, full_name, role, active FROM users ORDER BY username'
+        'SELECT id, username, full_name, role, active FROM users
+         WHERE active = 1 OR role IN (\'admin\',\'sistemas\') ORDER BY username'
     )->fetchAll());
 }
 
@@ -750,7 +941,9 @@ if ($path === '/users' && $method === 'POST') {
             $username, hash('sha256', $salt . $password), $salt,
             $b['full_name'] ?? $username, $role,
         ]);
-    respond(['id' => (int)db()->lastInsertId()], 201);
+    $newId = (int)db()->lastInsertId();
+    audit('crear', 'usuario', $newId, "$username ($role)");
+    respond(['id' => $newId], 201);
 }
 
 if (preg_match('#^/users/(\d+)$#', $path, $m) && $method === 'DELETE') {
@@ -760,26 +953,30 @@ if (preg_match('#^/users/(\d+)$#', $path, $m) && $method === 'DELETE') {
     $stmt->execute([$id]);
     $target = $stmt->fetch();
     if ($target === false) respond(['error' => 'no existe'], 404);
-    if ($target['role'] === 'admin') {
-        respond(['error' => 'no se puede eliminar al administrador'], 403);
+    if (in_array($target['role'], ['admin', 'sistemas'], true)) {
+        respond(['error' => 'no se puede dar de baja a este usuario'], 403);
     }
-    db()->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+    // Baja logica: la cuenta se oculta pero conserva su historial de acciones
+    softDelete('users', $id, 'usuario');
     respond(['ok' => true]);
 }
 
 if (preg_match('#^/users/(\d+)/active$#', $path, $m) && $method === 'PATCH') {
     requireAdmin();
     $id = (int)$m[1];
-    $stmt = db()->prepare('SELECT role FROM users WHERE id = ?');
+    $stmt = db()->prepare('SELECT role, full_name FROM users WHERE id = ?');
     $stmt->execute([$id]);
     $target = $stmt->fetch();
     if ($target === false) respond(['error' => 'no existe'], 404);
-    if ($target['role'] === 'admin') {
-        respond(['error' => 'no se puede deshabilitar al administrador'], 403);
+    if (in_array($target['role'], ['admin', 'sistemas'], true)) {
+        respond(['error' => 'no se puede deshabilitar a este usuario'], 403);
     }
     $b = body();
+    $enabled = ($b['active'] ?? false) === true;
     db()->prepare('UPDATE users SET active = ? WHERE id = ?')
-        ->execute([($b['active'] ?? false) === true ? 1 : 0, $id]);
+        ->execute([$enabled ? 1 : 0, $id]);
+    audit($enabled ? 'habilitar' : 'deshabilitar', 'usuario', $id,
+        $target['full_name'], $b['reason'] ?? null);
     respond(['ok' => true]);
 }
 

@@ -1,4 +1,4 @@
-import '../../../../core/api/api_client.dart';
+﻿import '../../../../core/api/api_client.dart';
 import '../../domain/entities/appointment.dart';
 
 class AppointmentRepository {
@@ -44,8 +44,8 @@ class AppointmentRepository {
     await _api.patch('/appointments/$id/status', {'status': status.dbValue});
   }
 
-  Future<void> delete(int id) async {
-    await _api.delete('/appointments/$id');
+  Future<void> delete(int id, {String? reason}) async {
+    await _api.delete('/appointments/$id', reason: reason);
   }
 
   String _formatDateTime(DateTime dt) =>

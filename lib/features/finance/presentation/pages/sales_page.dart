@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/auth/session.dart';
+import '../../../../core/widgets/deactivate_dialog.dart';
 import '../../../patients/data/repositories/patient_repository_impl.dart';
 import '../../../patients/domain/entities/patient.dart';
 import '../../data/repositories/finance_repository.dart';
@@ -158,28 +160,22 @@ class _SalesPageState extends State<SalesPage> {
   }
 
   Future<void> _void(Sale sale) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Anular cobro'),
-        content: Text(
-            'El cobro #${sale.id} por ${formatMoney(sale.total)} quedara anulado '
-            'y dejara de sumar en los reportes.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Anular'),
-          ),
-        ],
-      ),
+    final reason = await DeactivateDialog.show(
+      context,
+      title: 'Anular cobro',
+      itemLabel: 'Cobro #${sale.id} - ${formatMoney(sale.total)}'
+          '${sale.patientName == null ? '' : ' - ${sale.patientName}'}',
+      actionLabel: 'Anular',
     );
-    if (confirm != true) return;
-    await _repo.voidSale(sale.id);
-    _load();
+    if (reason == null) return;
+    try {
+      await _repo.voidSale(sale.id, reason: reason);
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo anular: $e')));
+    }
   }
 
   Color _statusColor(String status) => switch (status) {
@@ -290,7 +286,7 @@ class _SalesPageState extends State<SalesPage> {
                   ],
                 ),
                 const SizedBox(width: 8),
-                if (s.status == 'pendiente')
+                if (s.status == 'pendiente' && Session.can('sales.payment'))
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
@@ -302,7 +298,7 @@ class _SalesPageState extends State<SalesPage> {
                     icon: const Icon(Icons.check, size: 18),
                     label: const Text('Registrar pago'),
                   ),
-                if (!anulado)
+                if (!anulado && Session.can('sales.void'))
                   IconButton(
                     tooltip: 'Anular',
                     icon: const Icon(Icons.block, size: 20),

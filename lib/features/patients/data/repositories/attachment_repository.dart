@@ -1,4 +1,4 @@
-import '../../../../core/api/api_client.dart';
+﻿import '../../../../core/api/api_client.dart';
 import '../../../../core/auth/session.dart';
 import '../../domain/entities/attachment.dart';
 
@@ -37,8 +37,8 @@ class AttachmentRepository {
     );
   }
 
-  Future<void> delete(int id) async {
-    await _api.delete('/attachments/$id');
+  Future<void> delete(int id, {String? reason}) async {
+    await _api.delete('/attachments/$id', reason: reason);
   }
 
   /// Descarga el contenido del archivo para verlo dentro de la app.

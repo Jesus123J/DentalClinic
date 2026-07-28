@@ -19,6 +19,9 @@ class AuthRepository {
       newUsername: user['username'] ?? '',
       newFullName: user['full_name'] ?? '',
       newRole: user['role'] ?? '',
+      newPermissions: {
+        for (final p in (data['permissions'] as List? ?? [])) p.toString(),
+      },
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/widgets/deactivate_dialog.dart';
 import '../../data/repositories/finance_repository.dart';
 import '../../domain/entities/finance_models.dart';
 import '../widgets/charts.dart';
@@ -93,28 +94,20 @@ class _TreatmentsTabState extends State<_TreatmentsTab> {
   }
 
   Future<void> _delete(Treatment t) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Quitar servicio'),
-        content: Text(
-            '"${t.name}" dejara de aparecer al cobrar. Los cobros anteriores '
-            'no se modifican.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Quitar'),
-          ),
-        ],
-      ),
+    final reason = await DeactivateDialog.show(
+      context,
+      title: 'Dar de baja servicio',
+      itemLabel: '${t.name} - ${formatMoney(t.price)}',
     );
-    if (confirm != true) return;
-    await _repo.deleteTreatment(t.id!);
-    _load();
+    if (reason == null) return;
+    try {
+      await _repo.deleteTreatment(t.id!, reason: reason);
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo dar de baja: $e')));
+    }
   }
 
   @override
@@ -390,8 +383,20 @@ class _ExpensesTabState extends State<_ExpensesTab> {
   }
 
   Future<void> _delete(Expense e) async {
-    await _repo.deleteExpense(e.id!);
-    _load();
+    final reason = await DeactivateDialog.show(
+      context,
+      title: 'Dar de baja gasto',
+      itemLabel: '${e.concept} - ${formatMoney(e.amount)}',
+    );
+    if (reason == null) return;
+    try {
+      await _repo.deleteExpense(e.id!, reason: reason);
+      _load();
+    } catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo dar de baja: $err')));
+    }
   }
 
   @override

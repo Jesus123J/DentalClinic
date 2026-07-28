@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/auth/session.dart';
+import '../../../../core/widgets/deactivate_dialog.dart';
+
 import '../../data/repositories/patient_repository_impl.dart';
 import '../../domain/entities/patient.dart';
 import '../widgets/patient_form_dialog.dart';
@@ -69,27 +72,20 @@ class _PatientsPageState extends State<PatientsPage> {
   }
 
   Future<void> _delete(Patient patient) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar paciente'),
-        content: Text(
-            'Se eliminara a ${patient.fullName} junto con sus citas e historia clinica. Continuar?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
+    final reason = await DeactivateDialog.show(
+      context,
+      title: 'Dar de baja paciente',
+      itemLabel: patient.fullName,
     );
-    if (confirm != true) return;
-    await _repo.delete(patient.id!);
-    _load();
+    if (reason == null) return;
+    try {
+      await _repo.delete(patient.id!, reason: reason);
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo dar de baja: $e')));
+    }
   }
 
   @override
@@ -176,23 +172,26 @@ class _PatientsPageState extends State<PatientsPage> {
                       ? '-'
                       : DateFormat('dd/MM/yyyy').format(p.birthDate!))),
                   DataCell(Row(children: [
-                    IconButton(
-                      tooltip: 'Historia clinica',
-                      icon: const Icon(Icons.folder_shared_outlined),
-                      onPressed: () async {
-                        await context.push('/patients/history', extra: p);
-                      },
-                    ),
-                    IconButton(
-                      tooltip: 'Editar',
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _edit(p),
-                    ),
-                    IconButton(
-                      tooltip: 'Eliminar',
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => _delete(p),
-                    ),
+                    if (Session.can('clinical.view'))
+                      IconButton(
+                        tooltip: 'Historia clinica',
+                        icon: const Icon(Icons.folder_shared_outlined),
+                        onPressed: () async {
+                          await context.push('/patients/history', extra: p);
+                        },
+                      ),
+                    if (Session.can('patients.edit'))
+                      IconButton(
+                        tooltip: 'Editar',
+                        icon: const Icon(Icons.edit_outlined),
+                        onPressed: () => _edit(p),
+                      ),
+                    if (Session.can('patients.deactivate'))
+                      IconButton(
+                        tooltip: 'Dar de baja',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _delete(p),
+                      ),
                   ])),
                 ]),
             ],

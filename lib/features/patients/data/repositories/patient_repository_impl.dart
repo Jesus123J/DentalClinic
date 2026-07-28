@@ -1,4 +1,4 @@
-import '../../../../core/api/api_client.dart';
+﻿import '../../../../core/api/api_client.dart';
 import '../../../appointments/domain/entities/appointment.dart';
 import '../../../finance/domain/entities/finance_models.dart';
 import '../../domain/entities/patient.dart';
@@ -64,8 +64,8 @@ class PatientRepositoryImpl implements PatientRepository {
   }
 
   @override
-  Future<void> delete(int id) async {
-    await _api.delete('/patients/$id');
+  Future<void> delete(int id, {String? reason}) async {
+    await _api.delete('/patients/$id', reason: reason);
   }
 
   static double _num(dynamic v) =>

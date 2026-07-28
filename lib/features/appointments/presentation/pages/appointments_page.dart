@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 
+import '../../../../core/auth/session.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/deactivate_dialog.dart';
 import '../../../patients/data/repositories/patient_repository_impl.dart';
 import '../../../patients/domain/entities/patient.dart';
 import '../../data/repositories/appointment_repository.dart';
@@ -93,27 +95,22 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
   }
 
   Future<void> _delete(Appointment a) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar cita'),
-        content: Text('Eliminar la cita de ${a.patientName}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
+    final reason = await DeactivateDialog.show(
+      context,
+      title: 'Dar de baja cita',
+      itemLabel: '${a.patientName} - '
+          '${DateFormat('dd/MM/yyyy HH:mm').format(a.dateTime)}',
     );
-    if (confirm != true) return;
-    await _repo.delete(a.id!);
-    _loadMonth();
-    _loadDay();
+    if (reason == null) return;
+    try {
+      await _repo.delete(a.id!, reason: reason);
+      _loadMonth();
+      _loadDay();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('No se pudo dar de baja: $e')));
+    }
   }
 
   Color _statusColor(AppointmentStatus status) => switch (status) {
@@ -301,15 +298,18 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                         _delete(a);
                     }
                   },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
                         value: 'atendida', child: Text('Marcar atendida')),
-                    PopupMenuItem(
+                    const PopupMenuItem(
                         value: 'pendiente', child: Text('Marcar pendiente')),
-                    PopupMenuItem(
+                    const PopupMenuItem(
                         value: 'cancelada', child: Text('Cancelar cita')),
-                    PopupMenuDivider(),
-                    PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
+                    if (Session.can('appointments.deactivate')) ...[
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                          value: 'eliminar', child: Text('Dar de baja')),
+                    ],
                   ],
                 ),
               ],

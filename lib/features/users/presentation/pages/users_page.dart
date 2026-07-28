@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/deactivate_dialog.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../domain/entities/app_user.dart';
 
@@ -64,37 +65,19 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   Future<void> _delete(AppUser user) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar cuenta'),
-        content: Text(
-            'Se eliminara definitivamente la cuenta @${user.username} '
-            '(${user.fullName}). Esta accion no se puede deshacer.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
+    final reason = await DeactivateDialog.show(
+      context,
+      title: 'Dar de baja cuenta',
+      itemLabel: '@${user.username} - ${user.fullName}',
     );
-    if (confirm != true) return;
+    if (reason == null) return;
     try {
-      await _repo.delete(user.id);
+      await _repo.delete(user.id, reason: reason);
       _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+          .showSnackBar(SnackBar(content: Text('No se pudo dar de baja: $e')));
     }
   }
 

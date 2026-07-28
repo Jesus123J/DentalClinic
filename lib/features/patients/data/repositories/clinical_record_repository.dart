@@ -1,4 +1,4 @@
-import '../../../../core/api/api_client.dart';
+﻿import '../../../../core/api/api_client.dart';
 import '../../domain/entities/clinical_record.dart';
 
 /// Historia clinica: registros medicos por paciente.
@@ -43,7 +43,7 @@ class ClinicalRecordRepository {
     });
   }
 
-  Future<void> delete(int id) async {
-    await _api.delete('/clinical-records/$id');
+  Future<void> delete(int id, {String? reason}) async {
+    await _api.delete('/clinical-records/$id', reason: reason);
   }
 }

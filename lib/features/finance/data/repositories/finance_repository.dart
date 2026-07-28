@@ -42,8 +42,8 @@ class FinanceRepository {
     }
   }
 
-  Future<void> deleteTreatment(int id) async {
-    await _api.delete('/treatments/$id');
+  Future<void> deleteTreatment(int id, {String? reason}) async {
+    await _api.delete('/treatments/$id', reason: reason);
   }
 
   // ---------- Cobros ----------
@@ -134,8 +134,8 @@ class FinanceRepository {
     });
   }
 
-  Future<void> voidSale(int id) async {
-    await _api.delete('/sales/$id');
+  Future<void> voidSale(int id, {required String reason}) async {
+    await _api.delete('/sales/$id', reason: reason);
   }
 
   // ---------- Gastos ----------
@@ -162,8 +162,8 @@ class FinanceRepository {
     });
   }
 
-  Future<void> deleteExpense(int id) async {
-    await _api.delete('/expenses/$id');
+  Future<void> deleteExpense(int id, {String? reason}) async {
+    await _api.delete('/expenses/$id', reason: reason);
   }
 
   // ---------- Resumen ----------

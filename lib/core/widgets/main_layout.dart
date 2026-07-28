@@ -15,20 +15,26 @@ class MainLayout extends StatelessWidget {
 
   final Widget child;
 
-  /// Finanzas y Usuarios solo para el administrador.
+  /// El menu se arma segun los permisos del rol que inicio sesion.
   static List<({String route, IconData icon, String label})>
       get _destinations => [
             (route: '/dashboard', icon: Icons.dashboard_outlined, label: 'Dashboard'),
-            (route: '/patients', icon: Icons.people_outline, label: 'Pacientes'),
-            (route: '/appointments', icon: Icons.calendar_month_outlined, label: 'Citas'),
-            (route: '/sales', icon: Icons.point_of_sale_outlined, label: 'Cobros'),
-            if (Session.role == 'admin')
+            if (Session.can('patients.view'))
+              (route: '/patients', icon: Icons.people_outline, label: 'Pacientes'),
+            if (Session.can('appointments.view'))
+              (route: '/appointments', icon: Icons.calendar_month_outlined, label: 'Citas'),
+            if (Session.can('sales.view'))
+              (route: '/sales', icon: Icons.point_of_sale_outlined, label: 'Cobros'),
+            if (Session.can('finance.view'))
               (route: '/finance', icon: Icons.insights_outlined, label: 'Finanzas'),
-            if (Session.role == 'admin')
+            if (Session.can('treatments.manage'))
               (route: '/catalog', icon: Icons.sell_outlined, label: 'Servicios'),
-            (route: '/reports', icon: Icons.bar_chart_outlined, label: 'Reportes'),
-            if (Session.role == 'admin')
+            if (Session.can('reports.view'))
+              (route: '/reports', icon: Icons.bar_chart_outlined, label: 'Reportes'),
+            if (Session.can('users.manage'))
               (route: '/users', icon: Icons.manage_accounts_outlined, label: 'Usuarios'),
+            if (Session.can('audit.view'))
+              (route: '/audit', icon: Icons.fact_check_outlined, label: 'Auditoria'),
           ];
 
   int _currentIndex(BuildContext context) {
@@ -278,9 +284,10 @@ class _UserFooter extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  Session.role ?? '',
+                  Session.roleLabel,
                   style:
                       const TextStyle(color: AppTheme.silver, fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
