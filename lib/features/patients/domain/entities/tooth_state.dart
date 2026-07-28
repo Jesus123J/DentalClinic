@@ -31,15 +31,36 @@ class ToothState extends Equatable {
     required this.tooth,
     required this.status,
     this.note,
+    this.updatedAt,
   });
 
   final int patientId;
   final String tooth; // FDI: 11-18, 21-28, 31-38, 41-48
   final ToothStatus status;
   final String? note;
+  final DateTime? updatedAt;
 
   @override
   List<Object?> get props => [patientId, tooth, status, note];
+}
+
+/// Un cambio registrado en el odontograma.
+class ToothChange {
+  const ToothChange({
+    required this.tooth,
+    required this.previousStatus,
+    required this.status,
+    this.note,
+    this.userName,
+    required this.changedAt,
+  });
+
+  final String tooth;
+  final ToothStatus previousStatus;
+  final ToothStatus status;
+  final String? note;
+  final String? userName;
+  final DateTime changedAt;
 }
 
 /// Orden de las piezas para dibujar el odontograma (adulto, FDI).

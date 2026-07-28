@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../data/repositories/odontogram_repository.dart';
 import '../../domain/entities/tooth_state.dart';
+
+final _dateTimeFmt = DateFormat('dd/MM/yyyy HH:mm');
+final _dateFmt = DateFormat('dd/MM/yyyy');
 
 /// Odontograma interactivo (adulto, notacion FDI):
 /// toca una pieza para asignarle estado y nota.
@@ -17,6 +21,7 @@ class OdontogramView extends StatefulWidget {
 class _OdontogramViewState extends State<OdontogramView> {
   final _repo = OdontogramRepository();
   Map<String, ToothState> _teeth = {};
+  List<ToothChange> _history = [];
   bool _loading = true;
   String? _error;
 
@@ -33,9 +38,11 @@ class _OdontogramViewState extends State<OdontogramView> {
     });
     try {
       final teeth = await _repo.getByPatient(widget.patientId);
+      final history = await _repo.history(widget.patientId);
       if (!mounted) return;
       setState(() {
         _teeth = teeth;
+        _history = history;
         _loading = false;
       });
     } catch (e) {
@@ -49,7 +56,9 @@ class _OdontogramViewState extends State<OdontogramView> {
 
   Future<void> _editTooth(String tooth) async {
     final current = _teeth[tooth];
-    final result = await _ToothDialog.show(context, tooth, current);
+    final history = await _repo.history(widget.patientId, tooth: tooth);
+    if (!mounted) return;
+    final result = await _ToothDialog.show(context, tooth, current, history);
     if (result == null) return;
     try {
       await _repo.save(ToothState(
@@ -147,7 +156,7 @@ class _OdontogramViewState extends State<OdontogramView> {
             const SizedBox(height: 8),
             for (final t in affected)
               Padding(
-                padding: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
                   children: [
                     Container(
@@ -159,12 +168,42 @@ class _OdontogramViewState extends State<OdontogramView> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text('Pieza ${t.tooth} — ${t.status.label}'
-                        '${t.note == null || t.note!.isEmpty ? '' : ' · ${t.note}'}'),
+                    Expanded(
+                      child: Text('Pieza ${t.tooth} - ${t.status.label}'
+                          '${t.note == null || t.note!.isEmpty ? '' : ' · ${t.note}'}'),
+                    ),
+                    if (t.updatedAt != null)
+                      Text(
+                        _dateFmt.format(t.updatedAt!),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                   ],
                 ),
               ),
+            const SizedBox(height: 20),
           ],
+          // Historial de cambios del odontograma
+          Text('Historial de cambios (${_history.length})',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          if (_history.isEmpty)
+            Text('Aun no se ha registrado ningun cambio.',
+                style: Theme.of(context).textTheme.bodySmall)
+          else
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  children: [
+                    for (final h in _history.take(30))
+                      _ChangeRow(change: h),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -189,6 +228,83 @@ class _OdontogramViewState extends State<OdontogramView> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Una linea del historial: pieza, cambio de estado, autor y fecha.
+class _ChangeRow extends StatelessWidget {
+  const _ChangeRow({required this.change});
+
+  final ToothChange change;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: change.status.color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              change.tooth,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: change.status.color,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  children: [
+                    Text(change.previousStatus.label,
+                        style: Theme.of(context).textTheme.bodySmall),
+                    const Icon(Icons.arrow_forward, size: 13),
+                    Text(
+                      change.status.label,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: change.status.color,
+                          ),
+                    ),
+                  ],
+                ),
+                if (change.note != null && change.note!.isNotEmpty)
+                  Text(change.note!,
+                      style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(_dateTimeFmt.format(change.changedAt),
+                  style: Theme.of(context).textTheme.bodySmall),
+              if (change.userName != null)
+                Text(change.userName!,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(fontSize: 11)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -259,16 +375,26 @@ class _ToothDialogResult {
 }
 
 class _ToothDialog extends StatefulWidget {
-  const _ToothDialog({required this.tooth, this.current});
+  const _ToothDialog({
+    required this.tooth,
+    this.current,
+    this.history = const [],
+  });
 
   final String tooth;
   final ToothState? current;
+  final List<ToothChange> history;
 
   static Future<_ToothDialogResult?> show(
-      BuildContext context, String tooth, ToothState? current) {
+    BuildContext context,
+    String tooth,
+    ToothState? current,
+    List<ToothChange> history,
+  ) {
     return showDialog<_ToothDialogResult>(
       context: context,
-      builder: (_) => _ToothDialog(tooth: tooth, current: current),
+      builder: (_) =>
+          _ToothDialog(tooth: tooth, current: current, history: history),
     );
   }
 
@@ -336,6 +462,56 @@ class _ToothDialogState extends State<_ToothDialog> {
               decoration:
                   const InputDecoration(labelText: 'Nota (opcional)'),
             ),
+            if (widget.current?.updatedAt != null)
+              Text(
+                'Ultima actualizacion: '
+                '${_dateTimeFmt.format(widget.current!.updatedAt!)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            if (widget.history.isNotEmpty) ...[
+              const Divider(),
+              Text('Historial de esta pieza (${widget.history.length})',
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 180),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      for (final h in widget.history)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: h.status.color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '${h.previousStatus.label} → ${h.status.label}',
+                                  style:
+                                      Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              Text(_dateFmt.format(h.changedAt),
+                                  style:
+                                      Theme.of(context).textTheme.bodySmall),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

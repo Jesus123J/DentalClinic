@@ -215,6 +215,7 @@ class PdfExporter {
     required Patient patient,
     required List<ClinicalRecord> records,
     List<ToothState> teeth = const [],
+    List<ToothChange> toothHistory = const [],
     PatientSummary? summary,
   }) async {
     final money = NumberFormat.currency(locale: 'es_PE', symbol: 'S/ ');
@@ -302,6 +303,32 @@ class PdfExporter {
                   fontWeight: pw.FontWeight.bold, color: PdfColors.white),
               headerDecoration: const pw.BoxDecoration(color: _gold),
               cellStyle: const pw.TextStyle(fontSize: 9),
+              oddRowDecoration:
+                  const pw.BoxDecoration(color: PdfColors.grey100),
+            ),
+          ],
+          if (toothHistory.isNotEmpty) ...[
+            pw.SizedBox(height: 10),
+            pw.Text('Cambios del odontograma (${toothHistory.length})',
+                style: pw.TextStyle(
+                    fontSize: 10, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 4),
+            pw.TableHelper.fromTextArray(
+              headers: const ['Fecha', 'Pieza', 'Cambio', 'Nota', 'Registro'],
+              data: [
+                for (final h in toothHistory)
+                  [
+                    _dateTime.format(h.changedAt),
+                    h.tooth,
+                    '${h.previousStatus.label} a ${h.status.label}',
+                    h.note ?? '-',
+                    h.userName ?? '-',
+                  ],
+              ],
+              headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+              headerDecoration: const pw.BoxDecoration(color: _gold),
+              cellStyle: const pw.TextStyle(fontSize: 8),
               oddRowDecoration:
                   const pw.BoxDecoration(color: PdfColors.grey100),
             ),

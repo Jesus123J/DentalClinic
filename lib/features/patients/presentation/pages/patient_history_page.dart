@@ -83,6 +83,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
 
   Future<void> _exportPdf() async {
     final teeth = await _odontogramRepo.getByPatient(widget.patient.id!);
+    final toothHistory = await _odontogramRepo.history(widget.patient.id!);
     PatientSummary? summary;
     try {
       summary = await PatientRepositoryImpl().summary(widget.patient.id!);
@@ -93,6 +94,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
       patient: widget.patient,
       records: _records,
       teeth: teeth.values.toList(),
+      toothHistory: toothHistory,
       summary: summary,
     );
   }

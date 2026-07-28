@@ -78,6 +78,22 @@ CREATE TABLE IF NOT EXISTS odontogram (
     REFERENCES patients(id) ON DELETE CASCADE
 );
 
+-- Historial de cambios del odontograma (trazabilidad por pieza y fecha)
+CREATE TABLE IF NOT EXISTS odontogram_history (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  patient_id INT NOT NULL,
+  tooth VARCHAR(2) NOT NULL,
+  previous_status VARCHAR(30),
+  status VARCHAR(30) NOT NULL,
+  note VARCHAR(200),
+  user_id INT NULL,
+  user_name VARCHAR(120),
+  changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_odo_hist_patient FOREIGN KEY (patient_id)
+    REFERENCES patients(id) ON DELETE CASCADE,
+  INDEX idx_odo_hist (patient_id, changed_at)
+);
+
 -- Archivos adjuntos de la historia clinica (radiografias, fotos, PDFs)
 CREATE TABLE IF NOT EXISTS attachments (
   id INT AUTO_INCREMENT PRIMARY KEY,

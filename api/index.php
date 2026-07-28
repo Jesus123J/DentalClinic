@@ -300,22 +300,61 @@ if ($path === '/odontogram' && $method === 'GET') {
 
 if ($path === '/odontogram' && $method === 'PUT') {
     $b = body();
+    $patientId = (int)($b['patient_id'] ?? 0);
+    $tooth = $b['tooth'] ?? '';
     $status = $b['status'] ?? 'sano';
+    $note = $b['note'] ?? null;
+
+    // Estado anterior, para dejar constancia del cambio
+    $prev = db()->prepare(
+        'SELECT status FROM odontogram WHERE patient_id = ? AND tooth = ?');
+    $prev->execute([$patientId, $tooth]);
+    $prevRow = $prev->fetch();
+    $previous = $prevRow === false ? 'sano' : $prevRow['status'];
+
     if ($status === 'sano') {
         // sano = estado por defecto: se elimina el registro de la pieza
         db()->prepare('DELETE FROM odontogram WHERE patient_id = ? AND tooth = ?')
-            ->execute([$b['patient_id'] ?? 0, $b['tooth'] ?? '']);
+            ->execute([$patientId, $tooth]);
     } else {
         db()->prepare(
             'INSERT INTO odontogram (patient_id, tooth, status, note)
              VALUES (?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note)')
+            ->execute([$patientId, $tooth, $status, $note]);
+    }
+
+    // Solo se registra en el historial si algo cambio realmente
+    if ($previous !== $status) {
+        $user = sessionUser();
+        db()->prepare(
+            'INSERT INTO odontogram_history
+             (patient_id, tooth, previous_status, status, note, user_id, user_name)
+             VALUES (?, ?, ?, ?, ?, ?, ?)')
             ->execute([
-                $b['patient_id'] ?? 0, $b['tooth'] ?? '',
-                $status, $b['note'] ?? null,
+                $patientId, $tooth, $previous, $status, $note,
+                $user['id'] ?? null, $user['full_name'] ?? null,
             ]);
     }
     respond(['ok' => true]);
+}
+
+// Historial de cambios del odontograma (todo el paciente o una pieza)
+if ($path === '/odontogram/history' && $method === 'GET') {
+    $patientId = (int)($_GET['patientId'] ?? 0);
+    $tooth = $_GET['tooth'] ?? null;
+    if ($tooth !== null && $tooth !== '') {
+        $stmt = db()->prepare(
+            'SELECT * FROM odontogram_history
+             WHERE patient_id = ? AND tooth = ? ORDER BY changed_at DESC, id DESC');
+        $stmt->execute([$patientId, $tooth]);
+    } else {
+        $stmt = db()->prepare(
+            'SELECT * FROM odontogram_history WHERE patient_id = ?
+             ORDER BY changed_at DESC, id DESC LIMIT 200');
+        $stmt->execute([$patientId]);
+    }
+    respond($stmt->fetchAll());
 }
 
 // ---------- Citas ----------
