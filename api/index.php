@@ -358,6 +358,88 @@ if (preg_match('#^/attachments/(\d+)$#', $path, $m) && $method === 'DELETE') {
     respond(['ok' => true]);
 }
 
+// ---------- Historia clinica formal (formato peruano, 8 secciones) ----------
+const HISTORY_JSON_FIELDS = [
+    'biological_functions', 'personal_general', 'personal_physiological',
+    'rasa', 'general_exam', 'extraoral_exam', 'intraoral_exam',
+];
+
+const HISTORY_FIELDS = [
+    'hc_number', 'birth_place', 'origin', 'occupation', 'trips_last_year',
+    'emergency_contact', 'chief_complaint', 'illness_time', 'illness_onset',
+    'illness_course', 'illness_signs', 'illness_story', 'biological_functions',
+    'risks', 'personal_general', 'personal_physiological',
+    'path_hypertension', 'path_cardiovascular', 'path_diabetes',
+    'path_endocrine', 'path_asthma', 'path_hepatitis', 'path_liver',
+    'path_kidney', 'path_tbc', 'path_infectious', 'path_bleeding',
+    'path_other', 'path_medication', 'allergy_drugs', 'allergy_food',
+    'allergy_detail', 'previous_surgeries', 'previous_hospitalizations',
+    'habit_tobacco', 'habit_alcohol', 'habit_drugs', 'is_pregnant',
+    'pregnancy_month', 'pathological_notes', 'last_dental_visit',
+    'previous_dental_treatments', 'previous_anesthesia', 'anesthesia_reaction',
+    'anesthesia_reaction_detail', 'previous_extractions',
+    'extraction_complications', 'extraction_complication_detail',
+    'stomatological_notes', 'family_history', 'rasa', 'ectoscopy',
+    'vital_blood_pressure', 'vital_pulse', 'vital_heart_rate',
+    'vital_respiratory_rate', 'vital_temperature', 'general_exam',
+    'extraoral_exam', 'intraoral_exam', 'lesion_map',
+    'presumptive_diagnosis', 'diagnostic_plan', 'auxiliary_exams',
+    'definitive_diagnosis', 'treatment_plan', 'performed_treatments',
+    'dentist_name', 'dentist_cop',
+];
+
+if (preg_match('#^/patients/(\d+)/history$#', $path, $m) && $method === 'GET') {
+    requirePermission('clinical.view');
+    $stmt = db()->prepare('SELECT * FROM clinical_histories WHERE patient_id = ?');
+    $stmt->execute([(int)$m[1]]);
+    $row = $stmt->fetch();
+    if ($row === false) {
+        respond(['exists' => false]);
+    }
+    foreach (HISTORY_JSON_FIELDS as $f) {
+        $row[$f] = $row[$f] === null ? null : json_decode($row[$f], true);
+    }
+    $row['exists'] = true;
+    respond($row);
+}
+
+if (preg_match('#^/patients/(\d+)/history$#', $path, $m) && $method === 'PUT') {
+    requirePermission('clinical.edit');
+    $patientId = (int)$m[1];
+    $b = body();
+    $user = sessionUser();
+
+    $values = [];
+    foreach (HISTORY_FIELDS as $f) {
+        $v = $b[$f] ?? null;
+        if (in_array($f, HISTORY_JSON_FIELDS, true)) {
+            $v = $v === null ? null : json_encode($v, JSON_UNESCAPED_UNICODE);
+        } elseif (is_bool($v)) {
+            $v = $v ? 1 : 0;
+        }
+        $values[] = $v;
+    }
+
+    $exists = db()->prepare('SELECT id FROM clinical_histories WHERE patient_id = ?');
+    $exists->execute([$patientId]);
+    if ($exists->fetch() === false) {
+        $cols = implode(', ', HISTORY_FIELDS);
+        $marks = implode(', ', array_fill(0, count(HISTORY_FIELDS), '?'));
+        db()->prepare(
+            "INSERT INTO clinical_histories (patient_id, updated_by, $cols)
+             VALUES (?, ?, $marks)")
+            ->execute(array_merge([$patientId, $user['full_name'] ?? null], $values));
+        audit('crear', 'historia clinica', $patientId);
+    } else {
+        $sets = implode(' = ?, ', HISTORY_FIELDS) . ' = ?';
+        db()->prepare(
+            "UPDATE clinical_histories SET updated_by = ?, $sets WHERE patient_id = ?")
+            ->execute(array_merge([$user['full_name'] ?? null], $values, [$patientId]));
+        audit('editar', 'historia clinica', $patientId);
+    }
+    respond(['ok' => true]);
+}
+
 // ---------- Odontograma ----------
 if ($path === '/odontogram' && $method === 'GET') {
     requirePermission('clinical.view');

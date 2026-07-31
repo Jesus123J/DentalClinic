@@ -17,6 +17,7 @@ import '../../domain/entities/attachment.dart';
 import '../../domain/entities/clinical_record.dart';
 import '../../domain/entities/patient.dart';
 import '../../domain/entities/patient_summary.dart';
+import '../widgets/clinical_history_tab.dart';
 import '../widgets/odontogram_view.dart';
 import '../widgets/patient_summary_tab.dart';
 
@@ -100,7 +101,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
   Widget build(BuildContext context) {
     final p = widget.patient;
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: Text('Historia clinica — ${p.fullName}'),
@@ -119,10 +120,13 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(icon: Icon(Icons.insights_outlined), text: 'Resumen'),
+              Tab(
+                  icon: Icon(Icons.assignment_ind_outlined),
+                  text: 'Historia clinica'),
               Tab(icon: Icon(Icons.grid_view_outlined), text: 'Odontograma'),
               Tab(
                   icon: Icon(Icons.receipt_long_outlined),
-                  text: 'Registros clinicos'),
+                  text: 'Evoluciones'),
               Tab(icon: Icon(Icons.attach_file), text: 'Archivos'),
             ],
           ),
@@ -165,6 +169,7 @@ class _PatientHistoryPageState extends State<PatientHistoryPage> {
                 child: TabBarView(
                   children: [
                     PatientSummaryTab(patientId: p.id!),
+                    ClinicalHistoryTab(patient: p),
                     OdontogramView(patientId: p.id!),
                     _buildRecords(),
                     _AttachmentsTab(patientId: p.id!),
