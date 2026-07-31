@@ -453,26 +453,38 @@ if ($path === '/odontogram' && $method === 'PUT') {
     $b = body();
     $patientId = (int)($b['patient_id'] ?? 0);
     $tooth = $b['tooth'] ?? '';
+    // NTS 150-MINSA-2019: el hallazgo puede ser de la pieza completa o de
+    // una cara (vestibular, lingual/palatina, mesial, distal, oclusal).
+    $surface = $b['surface'] ?? 'completa';
+    // La denticion se deduce del numero FDI: 51-85 son piezas deciduas.
+    $toothNumber = (int)$tooth;
+    $dentition = ($toothNumber >= 51 && $toothNumber <= 85)
+        ? 'decidua' : 'permanente';
     $status = $b['status'] ?? 'sano';
     $note = $b['note'] ?? null;
 
     // Estado anterior, para dejar constancia del cambio
     $prev = db()->prepare(
-        'SELECT status FROM odontogram WHERE patient_id = ? AND tooth = ?');
-    $prev->execute([$patientId, $tooth]);
+        'SELECT status FROM odontogram
+         WHERE patient_id = ? AND tooth = ? AND surface = ?');
+    $prev->execute([$patientId, $tooth, $surface]);
     $prevRow = $prev->fetch();
     $previous = $prevRow === false ? 'sano' : $prevRow['status'];
 
     if ($status === 'sano') {
-        // sano = estado por defecto: se elimina el registro de la pieza
-        db()->prepare('DELETE FROM odontogram WHERE patient_id = ? AND tooth = ?')
-            ->execute([$patientId, $tooth]);
+        // sano = estado por defecto: se quita el registro de esa cara
+        db()->prepare(
+            'DELETE FROM odontogram
+             WHERE patient_id = ? AND tooth = ? AND surface = ?')
+            ->execute([$patientId, $tooth, $surface]);
     } else {
         db()->prepare(
-            'INSERT INTO odontogram (patient_id, tooth, status, note)
-             VALUES (?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note)')
-            ->execute([$patientId, $tooth, $status, $note]);
+            'INSERT INTO odontogram (patient_id, tooth, surface, dentition, status, note)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE status = VALUES(status),
+                                     note = VALUES(note),
+                                     dentition = VALUES(dentition)')
+            ->execute([$patientId, $tooth, $surface, $dentition, $status, $note]);
     }
 
     // Solo se registra en el historial si algo cambio realmente
@@ -480,13 +492,43 @@ if ($path === '/odontogram' && $method === 'PUT') {
         $user = sessionUser();
         db()->prepare(
             'INSERT INTO odontogram_history
-             (patient_id, tooth, previous_status, status, note, user_id, user_name)
-             VALUES (?, ?, ?, ?, ?, ?, ?)')
+             (patient_id, tooth, surface, previous_status, status, note,
+              user_id, user_name)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
             ->execute([
-                $patientId, $tooth, $previous, $status, $note,
+                $patientId, $tooth, $surface, $previous, $status, $note,
                 $user['id'] ?? null, $user['full_name'] ?? null,
             ]);
     }
+    respond(['ok' => true]);
+}
+
+// Especificaciones y observaciones del odontograma (pie del formato oficial)
+if ($path === '/odontogram/notes' && $method === 'GET') {
+    requirePermission('clinical.view');
+    $stmt = db()->prepare('SELECT * FROM odontogram_notes WHERE patient_id = ?');
+    $stmt->execute([(int)($_GET['patientId'] ?? 0)]);
+    $row = $stmt->fetch();
+    respond($row === false
+        ? ['specifications' => null, 'observations' => null]
+        : $row);
+}
+
+if ($path === '/odontogram/notes' && $method === 'PUT') {
+    requirePermission('clinical.edit');
+    $b = body();
+    $user = sessionUser();
+    db()->prepare(
+        'INSERT INTO odontogram_notes
+         (patient_id, specifications, observations, updated_by)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE specifications = VALUES(specifications),
+                                 observations = VALUES(observations),
+                                 updated_by = VALUES(updated_by)')
+        ->execute([
+            (int)($b['patient_id'] ?? 0), $b['specifications'] ?? null,
+            $b['observations'] ?? null, $user['full_name'] ?? null,
+        ]);
     respond(['ok' => true]);
 }
 

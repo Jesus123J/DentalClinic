@@ -46,50 +46,103 @@ class PdfExporter {
         ],
       );
 
-  /// Dibuja una pieza del odontograma en el PDF.
-  static pw.Widget _pdfToothBox(String tooth, ToothState? state) {
-    final status = state?.status ?? ToothStatus.sano;
-    final healthy = status == ToothStatus.sano;
-    final fill = healthy
-        ? PdfColors.white
-        : PdfColor.fromInt(status.color.toARGB32());
-    return pw.Container(
-      width: 23,
-      height: 30,
-      margin: const pw.EdgeInsets.symmetric(horizontal: 1),
-      alignment: pw.Alignment.center,
+  /// Dibuja una pieza del odontograma con sus caras, como el grafico
+  /// oficial (NTS 150-MINSA-2019).
+  static pw.Widget _pdfToothBox(
+      String tooth, Map<ToothSurface, ToothState> surfaces,
+      {required bool labelOnTop}) {
+    final whole = surfaces[ToothSurface.completa];
+    PdfColor faceColor(ToothSurface s) {
+      final st = surfaces[s]?.status;
+      return st == null || st == ToothStatus.sano
+          ? PdfColors.white
+          : PdfColor.fromInt(st.color.toARGB32());
+    }
+
+    // El diente se dibuja como tres bandas: vestibular / (mesial-oclusal-distal) / lingual
+    final drawing = pw.Container(
+      width: 21,
+      height: 21,
       decoration: pw.BoxDecoration(
-        color: fill,
         border: pw.Border.all(
-            color: healthy ? PdfColors.grey400 : fill, width: 1),
-        borderRadius: pw.BorderRadius.circular(4),
-      ),
-      child: pw.Text(
-        status == ToothStatus.extraido ? 'X' : tooth,
-        style: pw.TextStyle(
-          fontSize: 7,
-          fontWeight: pw.FontWeight.bold,
-          color: healthy ? PdfColors.grey800 : PdfColors.white,
+          color: whole == null || whole.status == ToothStatus.sano
+              ? PdfColors.grey500
+              : PdfColor.fromInt(whole.status.color.toARGB32()),
+          width: whole == null || whole.status == ToothStatus.sano ? 0.6 : 1.6,
         ),
+      ),
+      child: pw.Column(
+        children: [
+          pw.Expanded(
+            child: pw.Container(
+              width: double.infinity,
+              color: faceColor(ToothSurface.vestibular),
+            ),
+          ),
+          pw.Expanded(
+            child: pw.Row(
+              children: [
+                pw.Expanded(
+                    child: pw.Container(color: faceColor(ToothSurface.mesial))),
+                pw.Expanded(
+                    child: pw.Container(color: faceColor(ToothSurface.oclusal))),
+                pw.Expanded(
+                    child: pw.Container(color: faceColor(ToothSurface.distal))),
+              ],
+            ),
+          ),
+          pw.Expanded(
+            child: pw.Container(
+              width: double.infinity,
+              color: faceColor(ToothSurface.lingual),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final label = pw.Text(
+      whole?.status == ToothStatus.extraido ? 'X' : tooth,
+      style: pw.TextStyle(
+        fontSize: 6,
+        fontWeight: pw.FontWeight.bold,
+        color: whole?.status == ToothStatus.extraido
+            ? PdfColors.red
+            : PdfColors.grey800,
+      ),
+    );
+
+    return pw.Container(
+      margin: const pw.EdgeInsets.symmetric(horizontal: 1),
+      child: pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: labelOnTop
+            ? [label, pw.SizedBox(height: 1), drawing]
+            : [drawing, pw.SizedBox(height: 1), label],
       ),
     );
   }
 
-  /// Fila de una arcada (16 piezas separadas por cuadrante).
+  /// Fila de una arcada, separada por cuadrantes.
   static pw.Widget _pdfArch(
-      List<String> teeth, Map<String, ToothState> byTooth) {
+    List<String> teeth,
+    Map<String, Map<ToothSurface, ToothState>> byTooth, {
+    required bool labelOnTop,
+    required int split,
+  }) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.center,
       children: [
         for (var i = 0; i < teeth.length; i++) ...[
-          if (i == 8)
+          if (i == split)
             pw.Container(
-              width: 1.2,
-              height: 30,
+              width: 1,
+              height: 24,
               color: PdfColors.grey600,
-              margin: const pw.EdgeInsets.symmetric(horizontal: 4),
+              margin: const pw.EdgeInsets.symmetric(horizontal: 3),
             ),
-          _pdfToothBox(teeth[i], byTooth[teeth[i]]),
+          _pdfToothBox(teeth[i], byTooth[teeth[i]] ?? const {},
+              labelOnTop: labelOnTop),
         ],
       ],
     );
@@ -97,10 +150,14 @@ class PdfExporter {
 
   /// Grafico completo del odontograma con leyenda.
   static pw.Widget _pdfOdontogram(List<ToothState> teeth) {
-    final byTooth = {for (final t in teeth) t.tooth: t};
-    final usedStatuses =
-        teeth.map((t) => t.status).toSet().toList()
-          ..sort((a, b) => a.index.compareTo(b.index));
+    final byTooth = <String, Map<ToothSurface, ToothState>>{};
+    for (final t in teeth) {
+      byTooth.putIfAbsent(t.tooth, () => {})[t.surface] = t;
+    }
+    final hasDeciduous = teeth.any((t) => t.isDeciduous);
+    final usedStatuses = teeth.map((t) => t.status).toSet().toList()
+      ..sort((a, b) => a.index.compareTo(b.index));
+
     return pw.Container(
       width: double.infinity,
       padding: const pw.EdgeInsets.all(10),
@@ -111,21 +168,27 @@ class PdfExporter {
       child: pw.Column(
         children: [
           pw.Text('Arcada superior',
-              style: const pw.TextStyle(
-                  fontSize: 8, color: PdfColors.grey600)),
-          pw.SizedBox(height: 4),
-          _pdfArch(kUpperTeeth, byTooth),
+              style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+          pw.SizedBox(height: 3),
+          _pdfArch(kUpperTeeth, byTooth, labelOnTop: true, split: 8),
+          if (hasDeciduous) ...[
+            pw.SizedBox(height: 6),
+            _pdfArch(kUpperDeciduous, byTooth, labelOnTop: true, split: 5),
+          ],
           pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(vertical: 8),
+            padding: const pw.EdgeInsets.symmetric(vertical: 7),
             child: pw.Divider(color: PdfColors.grey400, height: 1),
           ),
-          _pdfArch(kLowerTeeth, byTooth),
-          pw.SizedBox(height: 4),
+          if (hasDeciduous) ...[
+            _pdfArch(kLowerDeciduous, byTooth, labelOnTop: false, split: 5),
+            pw.SizedBox(height: 6),
+          ],
+          _pdfArch(kLowerTeeth, byTooth, labelOnTop: false, split: 8),
+          pw.SizedBox(height: 3),
           pw.Text('Arcada inferior',
-              style: const pw.TextStyle(
-                  fontSize: 8, color: PdfColors.grey600)),
+              style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
           if (usedStatuses.isNotEmpty) ...[
-            pw.SizedBox(height: 10),
+            pw.SizedBox(height: 8),
             pw.Wrap(
               spacing: 10,
               runSpacing: 4,
@@ -295,9 +358,17 @@ class PdfExporter {
                     fontSize: 10, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 4),
             pw.TableHelper.fromTextArray(
-              headers: ['Pieza (FDI)', 'Estado', 'Nota'],
+              headers: ['Pieza (FDI)', 'Cara', 'Estado', 'Nota'],
               data: [
-                for (final t in teeth) [t.tooth, t.status.label, t.note ?? '-'],
+                for (final t in teeth)
+                  [
+                    t.tooth,
+                    t.surface == ToothSurface.completa
+                        ? 'Completa'
+                        : t.surface.label,
+                    t.status.label,
+                    t.note ?? '-',
+                  ],
               ],
               headerStyle: pw.TextStyle(
                   fontWeight: pw.FontWeight.bold, color: PdfColors.white),
@@ -314,12 +385,17 @@ class PdfExporter {
                     fontSize: 10, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 4),
             pw.TableHelper.fromTextArray(
-              headers: const ['Fecha', 'Pieza', 'Cambio', 'Nota', 'Registro'],
+              headers: const [
+                'Fecha', 'Pieza', 'Cara', 'Cambio', 'Nota', 'Registro'
+              ],
               data: [
                 for (final h in toothHistory)
                   [
                     _dateTime.format(h.changedAt),
                     h.tooth,
+                    h.surface == ToothSurface.completa
+                        ? 'Completa'
+                        : h.surface.label,
                     '${h.previousStatus.label} a ${h.status.label}',
                     h.note ?? '-',
                     h.userName ?? '-',
